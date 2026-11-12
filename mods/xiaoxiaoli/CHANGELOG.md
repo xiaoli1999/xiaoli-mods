@@ -2,6 +2,11 @@
 
 小小黎 AI 工作台每个版本的更新要点，新的在上面。自动更新发现新版时，截取新版本那一节的前几条告诉用户。
 
+## 0.9.1
+
+- 提到陪伴猫的地方改叫「小克」：收起面板的提示、README 里与陪伴猫的联动说明等（猫的名字改回小克，命令是 `/xiaoke`）
+- 体检清单新增 uv 一项（TAPD 的 MCP 服务器靠 uvx 启动）；演练的体检说明补上 Windows 上用 npx 启动的 MCP 要写成 `cmd /c npx`
+
 ## 0.9.0
 
 - 可以从插件市场安装：`claude plugin marketplace add xiaoli1999/xiaoli-mods` 后装 `xiaoxiaoli@xiaoli-mods`
