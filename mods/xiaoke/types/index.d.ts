@@ -1,4 +1,4 @@
-// 小黎的状态契约：$.state 中每个值的类型
+// 小克的状态契约：$.state 中每个值的类型
 
 /** 心情：决定像素形象的表情 */
 export type Mood = 'idle' | 'watching' | 'happy' | 'worried' | 'sleepy' | 'proud' | 'shy'
@@ -52,7 +52,7 @@ export type RestKind = 'sit' | 'water' | 'manual'
 
 /** 缓存保活：本会话的计时和今天的保活记录 */
 export type KeepAlive = {
-  /** 开关（/xiaoli keep on|off，跨会话记住） */
+  /** 开关（/xiaoke keep on|off，跨会话记住） */
   isOn: boolean
   /** 主对话最后一次请求（含保活）的时间，计时起点；0 为还没有可保的缓存 */
   lastAt: number
@@ -60,7 +60,7 @@ export type KeepAlive = {
   realAt: number
   /** 失败后几点重试，0 为不重试 */
   retryAt: number
-  /** 停下的原因，'' 为没停；下次对话或 /xiaoli keep on 后清空 */
+  /** 停下的原因，'' 为没停；下次对话或 /xiaoke keep on 后清空 */
   stopped: string
   /** 保活请求正在路上 */
   isSending: boolean
@@ -75,7 +75,7 @@ export type KeepAlive = {
   /** 上次保活的结果，'' 为今天还没保活过 */
   last: string
   /**
-   * 可选上限：连续这么多小时没真实对话就停（1–72，/xiaoli keep max <小时>|off，跨会话记住）；
+   * 可选上限：连续这么多小时没真实对话就停（1–72，/xiaoke keep max <小时>|off，跨会话记住）；
    * 0 为不设上限，一直保活到会话关闭（默认）
    */
   maxHours: number
@@ -149,7 +149,7 @@ declare module 'claude-code' {
       /** 点击口径：终端上报列 = off + Σ(英文 1 列，中文 cjk 列) */
       clickMap: { off: number; cjk: number }
       /**
-       * 真实台词开关（/xiaoli ai on|off）：只管每轮结束时自动让 haiku 结合实际发生的事说一句（开始时是零 token 的模板句）；
+       * 真实台词开关（/xiaoke ai on|off）：只管每轮结束时自动让 haiku 结合实际发生的事说一句（开始时是零 token 的模板句）；
        * 「悄悄话」是用户主动点的，不受这个开关影响
        */
       isAiLines: boolean

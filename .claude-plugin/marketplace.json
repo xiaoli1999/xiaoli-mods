@@ -3,12 +3,12 @@
   "owner": {
     "name": "xiao li"
   },
-  "description": "小黎 mods：陪伴猫小黎与小小黎 AI 工作台两个 Claude Code mod",
+  "description": "小黎 mods：陪伴猫小克与小小黎 AI 工作台两个 Claude Code mod",
   "plugins": [
     {
       "name": "xiaoke",
       "source": "./mods/xiaoke",
-      "description": "陪伴猫小黎：趴在输入框上方，实时陪伴、点击互动、模型与思考强度、token 与额度预估、定点久坐喝水提醒、提示词缓存保活"
+      "description": "陪伴猫小克（xiaoke）：趴在输入框上方，实时陪伴、点击互动、模型与思考强度、token 与额度预估、定点久坐喝水提醒、提示词缓存保活"
     },
     {
       "name": "xiaoxiaoli",

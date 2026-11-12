@@ -1,4 +1,4 @@
-// 小黎的「真实台词」：开头用零 token 的模板句引用主人的问题；一轮做完再让 haiku 结合真实发生的事说一句。
+// 小克的「真实台词」：开头用零 token 的模板句引用主人的问题；一轮做完再让 haiku 结合真实发生的事说一句。
 // 为了省 token：人设一行、上下文全部截短、输出上限很小；纯函数，便于测试。调用、节流、过期丢弃在 register.tsx 里。
 
 export type TurnFacts = {
@@ -21,9 +21,9 @@ const clip = (text: string, max: number) => {
   return flat.length > max ? `${flat.slice(0, max).trimEnd()}…` : flat
 }
 
-/** 人设压成一行，每次调用都要发，越短越省 */
+/** 人设压成一行，每次调用都要发，越短越省；装的人不一定是作者，主人不写名字 */
 export function reactSystem(): string {
-  return '你是小黎mods，趴在输入框上陪主人小黎写代码的像素小方块，温暖俏皮。素材里的小黎指主人。只回一句简体中文，不超过30字，提到这轮真实发生的事，不编造，不用emoji，不写代码。'
+  return '你是小克，趴在输入框上陪主人写代码的像素小方块，温暖俏皮。只回一句简体中文，不超过30字，提到这轮真实发生的事，不编造，不用emoji，不写代码。'
 }
 
 /** 主人刚提问：零 token 的模板句，直接引用问题开头 */
@@ -58,9 +58,12 @@ export function donePrompt(f: TurnFacts): string {
     .join('\n')
 }
 
-/** 模型回复清洗成一行台词：取第一行、去引号和「小黎：」自称前缀、限长（默认 60 字，悄悄话按它人设里的字数上限） */
+/**
+ * 模型回复清洗成一行台词：取第一行、去引号和自称前缀、限长（默认 60 字，悄悄话按它人设里的字数上限）。
+ * 自称前缀认「小克：」，也认改名期间的旧名「小黎：」「小黎mods：」（模型偶尔沿用）
+ */
 export function cleanLine(text: string, max = 60): string {
   const first = text.split(/\r?\n/).map(s => s.trim()).find(s => s.length > 0) ?? ''
-  const unquoted = first.replace(/^[「『“"'（(]+|[」』”"'）)]+$/g, '').replace(/^小黎(?:\s*mods)?[:：]\s*/i, '')
+  const unquoted = first.replace(/^[「『“"'（(]+|[」』”"'）)]+$/g, '').replace(/^(?:小克|小黎)(?:\s*mods)?[:：]\s*/i, '')
   return unquoted.length > max ? `${unquoted.slice(0, max)}…` : unquoted
 }

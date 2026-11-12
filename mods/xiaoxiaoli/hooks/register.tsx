@@ -225,7 +225,7 @@ const USAGE_TEXT = [
 /** 本项目记着不用 TAPD（systems.tapd 为 false）时 refresh 的说法 */
 const TAPD_OFF_REPLY = '本项目记着不用 TAPD（systems.tapd 为 false），不列 TAPD 项目、不拉待办，进行中区照常；要用时对 AI 说「这个项目用 TAPD」'
 const NOT_BOUND_TEXT = '本项目还没绑定 TAPD 项目，在面板里点一个绑定，或对 AI 说「这个项目对应 TAPD 的某某项目」'
-/** 终端不够宽、面板没画出来时的提示：自动打开（轮询、小黎代跑）时建议手动运行 show；用户自己运行 show 时只说拉宽终端 */
+/** 终端不够宽、面板没画出来时的提示：自动打开（轮询、小克代跑）时建议手动运行 show；用户自己运行 show 时只说拉宽终端 */
 const PANE_WAIT_TEXT = '终端不够宽，侧栏先挂起；/xiaoxiaoli show 可直接打开'
 const PANE_WAIT_ASKED_TEXT = '终端不够宽，侧栏没能画出来，把终端拉宽后再试'
 /** 还没起名、这次没自动发起设置引导时，会话启动弹一次的提示 */
@@ -1015,7 +1015,7 @@ const applyPane = async ($: Dollar, want: PaneWant, isAsked = false): Promise<vo
     await refreshTodos($)
 }
 
-/** 自己改开关时同步写环境变量，让小黎的按钮和轮询看到同一个值 */
+/** 自己改开关时同步写环境变量，让小克的按钮和轮询看到同一个值 */
 const setPaneEnv = async ($: Dollar, want: PaneWant): Promise<void> => {
     lastEnv = want
     await $.env.set('XIAOXIAOLI_PANE', want)
@@ -2130,7 +2130,7 @@ const runCommand = async ($: Dollar, arg: string, isAsked: boolean): Promise<str
     if (want !== undefined) {
         await setPaneEnv($, want)
         await applyPane($, want, isAsked)
-        return say($, want === 'show' ? '侧栏已打开' : '侧栏已收起，/xiaoxiaoli show 或小黎 mods 的「干活」再打开')
+        return say($, want === 'show' ? '侧栏已打开' : '侧栏已收起，/xiaoxiaoli show 或陪伴猫小克的「干活」再打开')
     }
     /* 第一个词是子命令，其余原样作参数（名字里可以有空格） */
     const sub = arg.split(/\s+/, 1)[0] ?? ''
@@ -2296,7 +2296,7 @@ export const register: Register = on => {
             $.ui.log(`演练工具注册失败：${describeError(cause)}`, { to: 'debug' })
         }
         await readProgress($)
-        /* 每次会话启动面板一律收起，开关同步成 hide，小黎的开关随之显示「干活」 */
+        /* 每次会话启动面板一律收起，开关同步成 hide，小克的开关随之显示「干活」 */
         await setPaneEnv($, 'hide')
         await applyPane($, 'hide')
         $.clock.every(ENV_POLL_MS, () => void pollPane($))
@@ -2370,11 +2370,11 @@ export const register: Register = on => {
 
     on('command.run', { command: 'xiaoxiaoli' }, async ($, e) => {
         const text = await runCommand($, e.args.trim(), e.origin.kind !== 'plugin')
-        /* 别的插件（小黎「干活」）代跑的命令不往 transcript 打字，用户亲自敲的照常回文字 */
+        /* 别的插件（小克「干活」）代跑的命令不往 transcript 打字，用户亲自敲的照常回文字 */
         return e.origin.kind === 'plugin' ? {} : { text }
     })
 
-    /* 用户手动关掉侧栏：开关同步成 hide，之后小黎的「干活」才能再打开 */
+    /* 用户手动关掉侧栏：开关同步成 hide，之后小克的「干活」才能再打开 */
     on('ui.close', async ($, e, next) => {
         const result = await next(e)
         if (e.id !== PANE_ID || e.origin.kind !== 'person') return result

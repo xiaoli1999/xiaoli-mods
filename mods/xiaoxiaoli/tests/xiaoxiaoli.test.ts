@@ -1476,7 +1476,7 @@ describe('环境变量开关', () => {
         expect(usage.text).toContain('用法')
     })
 
-    test('别的插件代跑 /xiaoxiaoli show（小黎「干活」）：照样打开，但返回 {} 不往 transcript 打字', async ($, on) => {
+    test('别的插件代跑 /xiaoxiaoli show（小克「干活」）：照样打开，但返回 {} 不往 transcript 打字', async ($, on) => {
         const { seen, env } = await boot($, on, { env: 'hide' })
         const presentation = { presentation: { isFullscreen: true, columns: 160 } }
         const byPlugin = await $.command.run({

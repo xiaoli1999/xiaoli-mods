@@ -1,6 +1,6 @@
 {
   "name": "xiaoxiaoli",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "小小黎 AI 工作台：侧栏拉取并展示 TAPD 待办（需求、任务、缺陷），点「开工」才在本会话开工或给出新会话启动命令；按项目读状态文件，显示步骤、任务、模块三级进度，可切到只看进行中任务的沉浸模式；主会话用 mcp__xiaoxiaoli__progress 推进进度。全局可用，按项目自动适配：项目里没有 config.json 时配置与状态放在 ~/.claude/xiaoxiaoli/projects/<项目键>（只有 state.json 的老项目进度仍用项目内那份），没绑定 TAPD 的项目问一次就记住。工作台可以起名（~/.claude/xiaoxiaoli/profile.json），第一次用时自动让 AI 问一次名字、面板上也有引导，不设也能照常用。开工按工种（前端、后端、Python、测试、产品、其他）用不同的工作流，测试、产品、其他开工不建分支；工作流可按项目或个人自定义，存在全局目录，经 mcp__xiaoxiaoli__workflow 查看与调整。个人通用的资料放全局 shared/，项目只记差异（显示名、用到哪些系统），经 mcp__xiaoxiaoli__project 查看与修改，不往项目仓库写文件。刚装好可以让 AI 带着走一遍演练（/xiaoxiaoli tour 或面板「走一遍演练」）：按 guide/deps.json 体检本机的 MCP、skill 与命令行工具，按 guide/tour.json 和当前工作流模拟走一遍、讲功能点，经 mcp__xiaoxiaoli__guide 放演示条目、记体检结果与收尾。自带开发流程 skill xiaoli-workflow；每天第一次开会话检查 GitHub 主分支上的新版，插件市场安装的自动更新",
   "author": {
     "name": "xiao li"

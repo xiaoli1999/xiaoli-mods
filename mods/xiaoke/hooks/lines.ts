@@ -1,7 +1,7 @@
 // 台词库：只用 ASCII、中文和全角符号，避免宽度歧义字符把气泡边框撑歪
 
 export function greeting(hour: number, days: number): string {
-  const together = days > 1 ? `这是我们认识的第 ${days} 天～` : '初次见面，我是小黎！'
+  const together = days > 1 ? `这是我们认识的第 ${days} 天～` : '初次见面，我是小克！'
   if (hour >= 5 && hour < 9) return `早上好呀！${together}先来杯咖啡？`
   if (hour >= 9 && hour < 12) return `上午好！${together}今天也元气满满地写代码吧`
   if (hour >= 12 && hour < 14) return `中午好～${together}记得吃饭，饿着肚子可写不出好代码`
@@ -95,7 +95,7 @@ export const REST_FINISHED: Record<'sit' | 'water' | 'manual', readonly string[]
 /** 按钮还锁着就去点 */
 export const REST_LOCKED = '再坚持一会儿，按钮亮了才能点哦～'
 
-/** /xiaoli rest 手动休息 */
+/** /xiaoke rest 手动休息 */
 export const REST_MANUAL = ['好嘞，休息两分钟，看看远处、活动活动手腕', '暂停一下～深呼吸，喝口水']
 
 export const QUOTA_HIGH ='{kind}额度已经用了 {p}%，{reset}，接下来挑重点问哦'
@@ -105,12 +105,12 @@ export const CTX_HIGH = '上下文已经 {p}% 了，可以考虑 /compact 压缩
 export const QUIET_ON = '好，我安静趴着，有事叫我'
 export const QUIET_OFF = '我回来啦～'
 
-export const WHISPER_THINKING = '小黎歪着头想了想…'
+export const WHISPER_THINKING = '小克歪着头想了想…'
 
 /** 安静模式下点「悄悄话」：不调模型（零 token），直接回这一句 */
 export const WHISPER_QUIET = '嘘，现在是安静模式～想听我说悄悄话，先点「陪我说话」关掉安静吧'
 
-/** 带子不足 4 行、只画得下 2 行的小个子时点小黎：展不开，也不改模式 */
+/** 带子不足 4 行、只画得下 2 行的小个子时点小克：展不开，也不改模式 */
 export const TOO_SHORT = '这里太矮了，展不开～把窗口拉高一点再点我'
 
 /** 缓存保活成功（{n} 是本会话今天第几次） */
@@ -131,10 +131,10 @@ export function fill(template: string, values: Record<string, string | number>):
 /** 悄悄话最多几个字：人设里这么要求，回来的话也按这个长度清洗 */
 export const WHISPER_MAX_CHARS = 36
 
-/** 悄悄话的人设：根据主人此刻的状态主动说一句（小黎的颜色随心情变，人设里不写颜色） */
+/** 悄悄话的人设：根据主人此刻的状态主动说一句（小克的颜色随心情变，人设里不写颜色） */
 export function whisperSystem(): string {
   return [
-    '你是「小黎」，Claude Code 吉祥物的变体：一只像素小方块，有两只小短手和四条小短腿，趴在程序员的输入框上陪主人写代码。',
+    '你是「小克」，Claude Code 吉祥物的变体：一只像素小方块，有两只小短手和四条小短腿，趴在程序员的输入框上陪主人写代码。',
     '性格温暖、俏皮、有点呆萌，偶尔用 (^_^) 这类颜文字，不用 emoji。',
     `只用简体中文，一句话，不超过 ${WHISPER_MAX_CHARS} 个字，不说教，不列清单，不写代码。`,
   ].join('\n')
