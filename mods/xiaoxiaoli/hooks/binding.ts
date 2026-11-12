@@ -92,7 +92,7 @@ const hashText = (text: string): string =>
  * 项目键：目录名（小写，不能进文件名的字符换成 -）加路径短哈希，同名不同路径的两个项目不会共用一份配置；
  * 哈希按规范写法算，分隔符、末尾斜杠、大小写不同的同一目录得到同一个键。
  * @param root 项目目录
- * @returns 项目键，如 fg-psd-demo-1a2b3c4d
+ * @returns 项目键，如 my-app-1a2b3c4d
  */
 export const projectKeyOf = (root: string): string => {
     const name = baseName(root)

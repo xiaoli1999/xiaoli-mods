@@ -12,15 +12,50 @@
 
 刚装好可以让 AI 带你走一遍演练：先检查本机已经装了哪些 MCP、skill 和命令行工具，缺的当场补或记下以后补，再按你的工作流模拟走一遍每个环节、讲讲功能点，卡在哪里就告诉你要准备什么；不建分支、不改 TAPD，见「体检与演练」。
 
+开发流程 skill `xiaoli-workflow` 随工作台一起装（会话里叫 `xiaoxiaoli:xiaoli-workflow`）；每天第一次开会话时自动检查新版，插件市场安装的自动更新，见「自动更新」。
+
 ## 安装
 
-把本目录追加进 `CLAUDE_CODE_PLUGIN_DIRS`（进程环境变量或 `~/.claude/settings.json` 的 `env`），Windows 用 `;` 分隔，然后重开 Claude Code。`<仓库>` 换成小黎 mods（xiaoli-mods）仓库的绝对路径：
+插件市场（推荐）：
+
+```
+claude plugin marketplace add xiaoli1999/xiaoli-mods
+claude plugin install xiaoxiaoli@xiaoli-mods
+```
+
+在会话里也可以一步装好（Claude Code 2.1.275 及以后）：
+
+```
+/plugin install xiaoxiaoli --marketplace xiaoli1999/xiaoli-mods
+```
+
+装好后重开会话，或在会话里输入 `/reload-plugins`。以前自己复制到 `~/.claude/skills/xiaoli-workflow` 的 skill，装好后删掉那份，用随插件来的。
+
+开发者本地加载：把本目录追加进 `CLAUDE_CODE_PLUGIN_DIRS`（进程环境变量或 `~/.claude/settings.json` 的 `env`），Windows 用 `;` 分隔，然后重开 Claude Code。`<仓库>` 换成小黎 mods（xiaoli-mods）仓库的绝对路径：
 
 ```
 CLAUDE_CODE_PLUGIN_DIRS=<仓库>\mods\xiaoke;<仓库>\mods\xiaoxiaoli
 ```
 
-同一个 mod 只放一份：换用本仓库的版本时，把原来指向 `~/.claude/mods/xiaoxiaoli` 的那一项换掉，不要两份并存。
+同一个 mod 只放一份：本地目录加载的会顶替插件市场装的同名插件；换用本仓库的版本时，把原来指向 `~/.claude/mods/xiaoxiaoli` 的那一项换掉，不要两份并存。本地目录加载的改了文件会热重载，自动更新只提示、不改文件，更新靠在仓库目录 `git pull`。
+
+### mod 目录结构
+
+```
+mods/xiaoxiaoli/
+├─ .claude-plugin/
+│  ├─ plugin.json          插件清单：名字、版本（自动更新比的就是它）、说明
+│  └─ icon.png             插件图标
+├─ hooks/                  代码：register.tsx 是入口，其余是各部分的纯函数（update.ts 管自动更新，与陪伴猫里的同名文件是同一份）
+├─ skills/xiaoli-workflow/ 随插件装的开发流程 skill（SKILL.md）
+├─ workflows/              六个工种的内置工作流
+├─ guide/                  体检依赖清单 deps.json 与演练脚本 tour.json
+├─ types/                  $.state 的类型
+├─ tests/                  测试与逐字副本夹具
+├─ config.json             项目内工作台文件的相对位置
+├─ CHANGELOG.md            每个版本的更新要点（自动更新时截给用户看）
+└─ README.md
+```
 
 TAPD 走会话里已连接的 MCP 服务器，代码里写死服务器名 `tapd`（`hooks/tapd.ts` 的 `TAPD_SERVER`）。核对：会话里输入 `/mcp`，TAPD 那一项的名字应为 `tapd`（工具名前缀 `mcp__tapd__`）；不一致就改这个常量。名字不对时面板顶部先显示「正在连接 TAPD，第 n 次重试」（按 5、15、30 秒自动重试），约 50 秒后三次都失败才显示「拉取失败（call-failed），点刷新重试」。
 
@@ -35,7 +70,7 @@ TAPD 走会话里已连接的 MCP 服务器，代码里写死服务器名 `tapd`
    - 只有进度文件的老项目（旧版 mod 在没配置的项目里也写 `state.json`）：绑定走全局，进度继续用项目内那份 `state.json`，不搬也不复制到全局目录。worktree 里的会话按上面的顺序找到主工作区那份就用那份。
 3. 取不到全局根目录时按项目内处理：没设 `XIAOXIAOLI_HOME`、没设 `CLAUDE_CONFIG_DIR`，用户目录变量（`USERPROFILE`、`HOME`）也都没有，才算取不到；设了前两者中的任一个，即使用户目录变量都没有也照常走全局。按项目内处理时进行中区照常读项目内的 `state.json`；待办区、`/xiaoxiaoli refresh`、绑定工具与 `/xiaoxiaoli unbind` 都如实说明「取不到用户目录，无法使用全局绑定；可设环境变量 XIAOXIAOLI_HOME 指定全局目录」，不说「没配 TAPD」。
 
-项目键 = 主工作区目录名（小写，不能进文件名的字符换成 `-`）+ `-` + 主工作区路径的 8 位短哈希，如 `fg-psd-demo-1a2b3c4d`。路径的分隔符、末尾斜杠、大小写不影响哈希；目录同名、路径不同的两个项目得到不同的键，不会串用配置。项目搬了位置就是新键，要重新绑定一次。
+项目键 = 主工作区目录名（小写，不能进文件名的字符换成 `-`）+ `-` + 主工作区路径的 8 位短哈希，如 `my-app-1a2b3c4d`。路径的分隔符、末尾斜杠、大小写不影响哈希；目录同名、路径不同的两个项目得到不同的键，不会串用配置。项目搬了位置就是新键，要重新绑定一次。
 
 全局根目录按顺序取：设了环境变量 `XIAOXIAOLI_HOME` 时直接用它（换位置、测试用）；否则设了 `CLAUDE_CONFIG_DIR` 时为 `$CLAUDE_CONFIG_DIR/xiaoxiaoli`；否则为 `<用户目录>/.claude/xiaoxiaoli`，用户目录先取 `USERPROFILE`、没有再取 `HOME`；都没有时见上面第 3 条。
 
@@ -258,7 +293,7 @@ mod 不读 `resources.md` 与 `secrets.env` 的内容，只看在不在；读写
 
 ## 体检与演练
 
-刚装好时，有的人本机已经装了一部分 MCP、skill 和命令行工具，有的人一个都没有；第一次用也不知道一条需求在工作台里怎么走。演练就是让会话里的 AI 带你过一遍：先体检，缺什么当场补（或记下以后补）；再按你的工作流模拟走一遍每个环节，卡在哪里就告诉你要准备什么数据、确认做法；最后讲讲工作台的功能点。检查与安装都由会话里的 AI 做，mod 只给脚本、在面板放演示条目、记结果与收尾，自己不起进程、不读设置。
+刚装好时，有的人本机已经装了一部分 MCP、skill 和命令行工具，有的人一个都没有；第一次用也不知道一条需求在工作台里怎么走。演练就是让会话里的 AI 带你过一遍：先体检，缺什么当场补（或记下以后补）；再按你的工作流模拟走一遍每个环节，卡在哪里就告诉你要准备什么数据、确认做法；最后讲讲工作台的功能点。检查与安装都由会话里的 AI 做，mod 只给脚本、在面板放演示条目、记结果与收尾，演练里不起进程、不读设置。
 
 ### 什么时候出现
 
@@ -561,15 +596,35 @@ cd '<项目目录>' && claude --session-id <新 UUID> -n '<短ID>' '开工 <长 
 
 每个项目：`get_todo` 拉 story / task / bug 各至多 50 条 → `get_stories_or_tasks`、`get_bug` 按 ID 补优先级、预计开始与结束、`story_id`、`iteration_id` → `get_workflows_status_map` 把需求、缺陷的状态码换成中文名（任务本地翻译）；本项目视图另调 `get_iterations`。补字段失败时按待办自带字段显示。待办整轮失败（多半是会话刚启动 TAPD MCP 还没连上）按 5、15、30 秒各自动重试一次，标题行显示「正在连接 TAPD，第 n 次重试」；三次都失败才显示「拉取失败（…），点刷新重试」，点刷新立即重拉。迭代没拉到时迭代行写「本迭代（迭代未加载，暂显示全部）」，这时列表其实没按迭代筛、显示的是全部；只有迭代没拉到时待办照常显示，迭代同样按 5、15、30 秒重试，标题行不提示重试也不报拉取失败。需求、任务、缺陷三组各自排序：有预计开始或结束的在前，按预计开始、预计结束、优先级；没有时间的在后，按优先级（High > Middle > Low > Nice To Have > 其他，缺陷的 urgent/high/medium/low/insignificant 并入同档）、ID。任务缩进挂在所属需求下，父需求不在列表的任务排在需求之后，缺陷最后。迭代筛选只作用于需求与任务，任务没有迭代时跟随父需求。行内 ID 是短 ID，确认按钮和发出的开工消息用 TAPD 长 ID。
 
+## 自动更新
+
+每台机器上，每天第一次在交互式会话里打开 Claude Code 时（会话启动后约 10 秒，不挡启动、排在首次引导之后），工作台去 GitHub 看一眼有没有新版。陪伴猫小黎用的是同一份逻辑（`hooks/update.ts` 两边相同），各查各的。
+
+1. 依次读 `https://raw.githubusercontent.com/xiaoli1999/xiaoli-mods/master/mods/xiaoxiaoli/.claude-plugin/plugin.json` 与 jsDelivr 镜像 `https://cdn.jsdelivr.net/gh/xiaoli1999/xiaoli-mods@master/mods/xiaoxiaoli/.claude-plugin/plugin.json` 里的版本号，第一个取到的为准。只认 `x.y.z` 这样的正式版本（可带 `v` 前缀，预发布与格式不对的不认），按段比数字（0.10.0 比 0.9.0 新），比本机 `plugin.json` 的新才算新版。有新版时同样从这两个地址读 `CHANGELOG.md`，截出「## <新版本>」那一节的前 5 条要点；取不到就只说版本号。
+2. 插件市场安装的：等会话空闲（不在一轮对话中间，每 5 秒看一次，最多等约 1 小时，等不到就这次不更新），先运行 `claude plugin marketplace update xiaoli-mods` 刷新市场副本，再运行 `claude plugin update xiaoxiaoli@xiaoli-mods`。两条都成功才算更新上（更新命令说「已是最新」时，只有它说的版本不比远端旧才算，比如同一天另一个会话刚更新过）：提示「工作台已从 x 更新到 y」，对话里记一段更新要点，并经引擎的 `$.command.run` 发起一次内置的 `/reload-plugins`，新版马上生效（引擎的命令表里没有它时，提示你输入 `/reload-plugins` 或下次开会话自动生效）。失败时提示原因与手动更新的两条命令，不影响继续使用，当天不算查过、下次开会话再试。
+3. 本地目录加载的（`CLAUDE_CODE_PLUGIN_DIRS`、`--plugin-dir`）：不改任何文件、不运行命令，只提示有新版、到仓库目录 `git pull`。
+
+细节：
+
+- 什么时候查：全新启动、有人在终端前（`isInteractive` 为真、有绘制表面）的会话；热重载（`$.state` 里记着本会话已启动）、`claude -p`、SDK 不查。
+- 一天一次：成功查过一次（不论有没有新版、本地目录加载的提示过、插件市场安装的更新成功）就把本地日期记进 `$.store` 的 `updateCheckedDay`，当天不再查；断网、两个地址都取不到、更新失败都不记，同一天下次开会话再试。
+- 怎么判断是插件市场安装：插件市场装的插件被复制进 Claude Code 的插件缓存，插件目录（`$.plugin.root`）是 `<插件根>/cache/<市场名>/xiaoxiaoli/<版本>/`（插件根默认 `~/.claude/plugins`，可经 `CLAUDE_CODE_PLUGIN_CACHE_DIR` 换位置），市场名就取路径里那一段（拼进命令前只认字母、数字与 `. _ -`）；其余都按本地目录加载处理。
+- 为什么先刷新市场：官方文档没写 `claude plugin update` 会不会先拉市场的新内容，先运行 `claude plugin marketplace update` 能保证拿到主分支上的新版。
+- Windows 上 npm 装的 `claude` 是 `.cmd`，不经 shell 起不来：这时同一条命令改经 `cmd /c` 运行；macOS、Linux 不这样试。
+- 和陪伴猫同时更新：两个 mod 经进程环境变量 `XIAOLI_MODS_UPDATING`（正在更新的 mod 名）错开，不同时跑 `claude plugin`；经 `XIAOLI_MODS_RELOAD_AT`（发起重载的时间）只发起一次 `/reload-plugins`，一次重载两个都生效。
+- 不提供关闭开关（作者的决定）。Claude Code 自己的网络限制（组织的联网策略等）拦下请求时按取不到处理。
+- 发版的人：只有 `plugin.json` 的 `version` 变了才算新版；`CHANGELOG.md` 每个版本一个「## <版本号>」小节，下面几条「- 」开头的要点。
+
 ## 安全边界
 
 - TAPD 只调白名单里 `get_` 开头的只读工具（`TAPD_READ_TOOLS`），绑定也只读参与的项目列表；不调任何写工具，不建需求。记着不用 TAPD（`systems.tapd` 为 `false`）的项目一个都不调。
 - 只挂自己工具的 `tool.call`（`progress`、`bind`、`setup`、`workflow`、`project`、`guide`），不挂 tool.check、PreToolUse；`classic.SessionStart` 只记下会话来源，照常交给后面的钩子，不改不拦。
 - 不经你操作就往会话里发消息的只有首次自动发起这一次（条件见「首次自动发起」）；演练只在你点「[ 走一遍演练 ]」、输入 `/xiaoxiaoli tour` 或在设置引导里选「现在走」后才开始。
-- 体检里的检查（看会话里有没有某个前缀的工具、运行 `git --version` 这类版本命令）与安装都是会话里的 AI 做，装任何全局工具、MCP、skill 前先问你（写在演练脚本里，由 AI 遵守）；mod 自己不起进程、不执行 `detect` 与 `install` 里的命令。
+- 体检里的检查（看会话里有没有某个前缀的工具、运行 `git --version` 这类版本命令）与安装都是会话里的 AI 做，装任何全局工具、MCP、skill 前先问你（写在演练脚本里，由 AI 遵守）；mod 不执行 `detect` 与 `install` 里的命令。
+- mod 自己运行的命令只有自动更新的两条：插件市场安装、发现新版时运行 `claude plugin marketplace update <市场名>` 与 `claude plugin update xiaoxiaoli@<市场名>`（Windows 上 `claude` 直接起不来时经 `cmd /c` 运行同样两条），每条最多 3 分钟；本地目录加载的不运行。更新成功后经 `$.command.run` 发起一次内置的 `/reload-plugins`。
 - 只写当前项目自己的配置与状态文件，外加全局档案：项目内模式写项目内的 `state.json`；全局模式写 `~/.claude/xiaoxiaoli/projects/<项目键>/` 下的 `config.json`（仅绑定、解绑与项目工具 set 改显示名、systems 时）与 `state.json`，只有进度文件的老项目状态写项目内那份 `state.json`；生成新会话命令前通用资料目录 `shared/` 不在时写一份说明用途的 `shared/README.md`，不碰 `resources.md`、`secrets.env`；不分模式，起名、设工种、先不设、首次自动发起记标记、演练收尾与「[ 不用了 ]」时写全局根目录下的 `profile.json`（版本比本 mod 新时不写）；演练工具 check 时写全局根目录下的 `env.json`（版本比本 mod 新时不写）；演练工具 start、finish 时在当前项目的状态文件里加、去演示条目；AI 经工作流工具 set、reset 时写全局根目录下的 `workflow.json`（个人自定义）或全局项目目录下的 `workflow.json`（项目自定义，项目内模式没有，不写），版本比本 mod 新时不写。不往项目仓库里写任何新文件。
-- 不读设置、不读密钥文件（含两处资料目录的 `secrets.env`、`resources.md`，项目工具只看它们在不在）、不起进程；只读 `XIAOXIAOLI_PANE`、`XIAOXIAOLI_HOME`、`CLAUDE_CONFIG_DIR`、`USERPROFILE`、`HOME` 这几个环境变量，只写 `XIAOXIAOLI_PANE`。
-- 网络：mod 自己不发网络请求，但会通过会话里已连接的 `tapd` MCP 服务器只读访问 TAPD（见第一条）。面板收起时也在拉：会话启动后的首次拉取，以及按 `refreshMinutes`（默认 10 分钟）的定时拉取都照常进行。
+- 不读设置、不读密钥文件（含两处资料目录的 `secrets.env`、`resources.md`，项目工具只看它们在不在）；自动更新时读自己的 `plugin.json`。只读 `XIAOXIAOLI_PANE`、`XIAOXIAOLI_HOME`、`CLAUDE_CONFIG_DIR`、`USERPROFILE`、`HOME`、`XIAOLI_MODS_UPDATING`、`XIAOLI_MODS_RELOAD_AT` 这几个环境变量，只写 `XIAOXIAOLI_PANE` 与后两个（两个 mod 错开更新用，只在本进程内）。`$.store` 里除待办视图与迭代选择外，多记一个自动更新的日期 `updateCheckedDay`。
+- 网络：mod 自己只发自动更新的请求，GET 两个公开地址（`raw.githubusercontent.com` 与 `cdn.jsdelivr.net` 上本仓库主分支的 `mods/xiaoxiaoli/.claude-plugin/plugin.json` 与 `CHANGELOG.md`），不带请求头、查询参数与任何用户或项目信息，每天最多一轮；另外通过会话里已连接的 `tapd` MCP 服务器只读访问 TAPD（见第一条）。面板收起时也在拉待办：会话启动后的首次拉取，以及按 `refreshMinutes`（默认 10 分钟）的定时拉取都照常进行。
 - 日志：debug 日志记待办条数、项目数与错误类型；异常（`$.mcp.call` 自己抛出的、工具注册失败、刷新面板失败等）另记原始信息的前 200 字符；解析 TAPD 返回出错时只记错误类型，TAPD 返回的正文不进日志。生成启动命令时把整条命令打一行进对话，方便复制。
 
 ## 测试
@@ -580,17 +635,19 @@ claude plugin test <仓库>\mods\xiaoxiaoli
 
 测试里的 TAPD、文件与环境变量全是造的，全局根目录经 `XIAOXIAOLI_HOME` 换成假路径，不碰真实用户目录；造的世界默认带一份已选「先不设」、演练已走过的 `profile.json`（`{ "version": 1, "skipped": true, "tour": "done" }`），测首次引导、首次自动发起与演练引导的用例显式换掉它；会话里的用户消息数、输入框草稿、是否交互式也都是造的。类型检查：引擎加载过一次 mod 后 `.claude-plugin/types/` 下有类型，`tsc -p <仓库>\mods\xiaoxiaoli`。那里的工具名清单是引擎保存 mod 时按已连接的工具生成的，新加的工具（`mcp__xiaoxiaoli__workflow`、`mcp__xiaoxiaoli__project`、`mcp__xiaoxiaoli__guide` 等）要等下次保存才进清单，所以代码里匹配 setup、workflow、project、guide 都用正则，测试里按宽松的入参调。造的世界也回答 `$.fs.exists`（按造的文件），并记下读过哪些文件，用来核对资料文件只看在不在、不读内容。
 
-测试引擎没有真实文件系统、也不能导入 JSON，内置工作流的测试读 `tests/fixtures/workflows.ts` 里的逐字副本（造的世界也用它回答 `workflows/<工种>.json`）。改了 `workflows/*.json` 后在 mod 目录下重新生成并核对：
+测试引擎没有真实文件系统、也不能导入 JSON，内置工作流的测试读 `tests/fixtures/workflows.ts` 里的逐字副本（造的世界也用它回答 `workflows/<工种>.json`）。改了 `workflows/*.json` 后在 mod 目录下重新生成并核对（命令里把换行统一成 `\n`：Windows 上 `core.autocrlf` 为 true 的检出里这些文件是 CRLF，仓库里存的是 LF）：
 
 ```
-node -e "const fs=require('fs');const r=['frontend','backend','python','test','product','other'];const t=fs.readFileSync('tests/fixtures/workflows.ts','utf8');const head=t.slice(0,t.indexOf('export const'));fs.writeFileSync('tests/fixtures/workflows.ts',head+'export const BUILTIN_WORKFLOW_TEXTS: Record<WorkRole, string> = {\n'+r.map(i=>'    '+i+': '+JSON.stringify(fs.readFileSync('workflows/'+i+'.json','utf8'))).join(',\n')+'\n}\n')"
+node -e "const fs=require('fs');const r=['frontend','backend','python','test','product','other'];const t=fs.readFileSync('tests/fixtures/workflows.ts','utf8');const head=t.slice(0,t.indexOf('export const'));fs.writeFileSync('tests/fixtures/workflows.ts',head+'export const BUILTIN_WORKFLOW_TEXTS: Record<WorkRole, string> = {\n'+r.map(i=>'    '+i+': '+JSON.stringify(fs.readFileSync('workflows/'+i+'.json','utf8').replace(/\r\n/g,'\n'))).join(',\n')+'\n}\n')"
 ```
 
 体检依赖清单与演练脚本同理：测试读 `tests/fixtures/guide.ts` 里 `guide/deps.json`、`guide/tour.json` 的逐字副本（造的世界也用它回答这两个文件，`guides` 可改写或去掉）。改了 `guide/*.json` 后在 mod 目录下重新生成：
 
 ```
-node -e "const fs=require('fs');const t=fs.readFileSync('tests/fixtures/guide.ts','utf8');const head=t.slice(0,t.indexOf('export const'));fs.writeFileSync('tests/fixtures/guide.ts',head+'export const GUIDE_TEXTS = {\n'+['deps','tour'].map(i=>'    '+i+': '+JSON.stringify(fs.readFileSync('guide/'+i+'.json','utf8'))).join(',\n')+'\n}\n')"
+node -e "const fs=require('fs');const t=fs.readFileSync('tests/fixtures/guide.ts','utf8');const head=t.slice(0,t.indexOf('export const'));fs.writeFileSync('tests/fixtures/guide.ts',head+'export const GUIDE_TEXTS = {\n'+['deps','tour'].map(i=>'    '+i+': '+JSON.stringify(fs.readFileSync('guide/'+i+'.json','utf8').replace(/\r\n/g,'\n'))).join(',\n')+'\n}\n')"
 ```
+
+自动更新的测试：`hooks/update.ts` 的纯函数与流程 `runUpdateCheck` 用造的外部能力直接测（插件市场安装的路径、命令、锁、重载都在这里测，因为测试引擎里的插件目录总是本地目录）；经会话启动的几条用造的 `http.fetch` 核对请求的地址与选项、一天一查、不查的情况。造的世界经 `manifest` 回答 mod 自己的 `.claude-plugin/plugin.json`，默认读不到（自动更新这次就不查）。`hooks/update.ts` 与陪伴猫里的同名文件是同一份，改一处要两边一起改。
 
 演练相关的用例里写死了依赖清单的 id 顺序、各工种筛出来的项与几条演练文字，改了这两个文件后跟着改。
 
@@ -627,3 +684,8 @@ node -e "const fs=require('fs');const t=fs.readFileSync('tests/fixtures/guide.ts
 - 中途关掉会话、没调 finish 时演示条目留在进行中区（这时面板不出演练引导）；再 start 会重置，finish 会清掉，也可以让 AI 用进度工具 `remove: true` 移除。
 - 中途叫停也记成走过（finish 只记 `done`）；想再走用 `/xiaoxiaoli tour`。
 - 演示条目绑在开始演练的会话上；在另一个会话里再 start 会把它重置并改记到那个会话。
+- 自动更新只在会话启动后查一次：会话一直开着跨过 0 点不会再查，下次开会话才查。同一天几乎同时开的两个会话可能都去更新：后一个会被告知已是最新，括号里的版本不比远端旧就按更新成功提示。
+- jsDelivr 镜像有缓存，可能比主分支晚一段时间；它只在 GitHub 原始地址取不到时才用。
+- 判断插件市场安装靠插件目录在不在 `cache/<市场名>/xiaoxiaoli/<版本>/` 下；Claude Code 以后改了缓存的目录结构，就会被当成本地目录加载、只提示不更新。
+- 自动发起的 `/reload-plugins` 会重新加载所有插件；官方文档写明重载会增删插件的 MCP 工具且让提示词缓存失效时不生效、要加 `--force`，这时按提示自己输入或重开会话。mod 不加 `--force`，免得替你作废缓存。
+- `claude plugin update` 的成功输出官方文档没有写全，判断「更新上了」只看两条命令的退出码，与输出里「already at the latest version (<版本>)」这一句。
