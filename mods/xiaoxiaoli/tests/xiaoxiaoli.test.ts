@@ -4132,7 +4132,7 @@ describe('0.8.0：体检与演练', () => {
 
     test('两份文件的读取：逐字副本都能用；读不到、不是 JSON、不是对象、版本更新或不对、缺 items 都给原因；格式不对的项与重复 id 跳过，roles 没写为全部工种', () => {
         const depList = depsOf()
-        expect(depList.map(i => i.id)).toEqual(['tapd', 'li-yuque-skills', 'chrome-devtools', 'figma', 'context7', 'git', 'node'])
+        expect(depList.map(i => i.id)).toEqual(['tapd', 'li-yuque-skills', 'chrome-devtools', 'figma', 'context7', 'git', 'node', 'uv'])
         expect(depList[0]).toEqual({
             id: 'tapd',
             kind: 'mcp',
@@ -4176,11 +4176,11 @@ describe('0.8.0：体检与演练', () => {
     test('按工种筛依赖；演练文字与工作流配对：先「<工作流 id>:<步骤键>」再「<步骤键>」，都没有用 fallback；六个内置工作流的每一步都有自己的演练文字', () => {
         const depList = depsOf()
         const idsOf = (role: WorkRole) => depsOfRole(depList, role).map(i => i.id)
-        expect(idsOf('frontend')).toEqual(['tapd', 'li-yuque-skills', 'chrome-devtools', 'figma', 'context7', 'git', 'node'])
-        expect(idsOf('backend')).toEqual(['tapd', 'li-yuque-skills', 'context7', 'git', 'node'])
-        expect(idsOf('test')).toEqual(['tapd', 'li-yuque-skills', 'chrome-devtools', 'node'])
-        expect(idsOf('product')).toEqual(['tapd', 'li-yuque-skills', 'chrome-devtools', 'figma', 'node'])
-        expect(idsOf('other')).toEqual(['tapd', 'li-yuque-skills', 'node'])
+        expect(idsOf('frontend')).toEqual(['tapd', 'li-yuque-skills', 'chrome-devtools', 'figma', 'context7', 'git', 'node', 'uv'])
+        expect(idsOf('backend')).toEqual(['tapd', 'li-yuque-skills', 'context7', 'git', 'node', 'uv'])
+        expect(idsOf('test')).toEqual(['tapd', 'li-yuque-skills', 'chrome-devtools', 'node', 'uv'])
+        expect(idsOf('product')).toEqual(['tapd', 'li-yuque-skills', 'chrome-devtools', 'figma', 'node', 'uv'])
+        expect(idsOf('other')).toEqual(['tapd', 'li-yuque-skills', 'node', 'uv'])
         const tour = tourOf()
         const other = tourStepsOf(tour, 'other', builtinOf('other').story)
         expect(other.map(i => i.key)).toEqual(['fetch', 'sort', 'read', 'align', 'execute', 'check', 'tapd'])
@@ -4217,7 +4217,7 @@ describe('0.8.0：体检与演练', () => {
         expect(script).toContain('工种：测试；工作流：内置 · 测试（走流程共 11 个环节）。')
         expect(script).toContain(`总规则\n1. ${tour.rules[0]}`)
         expect(script).toContain(`第一部分 体检\n1. ${tour.check[0]}`)
-        expect(script).toContain('依赖清单（测试用得到的 4 项）：')
+        expect(script).toContain('依赖清单（测试用得到的 5 项）：')
         expect(script).toContain(
             '- tapd（MCP）TAPD：拉待办、读需求与缺陷、流转状态、发评论；检测：会话里有 mcp__tapd__ 开头的工具（服务器名必须是 tapd）；安装：claude mcp add tapd -e TAPD_ACCESS_TOKEN=<令牌> -- uvx mcp-server-tapd；账号：需要 TAPD 个人访问令牌，在 TAPD 的个人设置里申请'
         )
@@ -4395,7 +4395,7 @@ describe('0.8.0：体检与演练', () => {
         expect(demo?.steps.every(i => i.status === 'todo')).toBe(true)
         expect(result.startsWith('演练脚本：照着走')).toBe(true)
         expect(result).toContain('工种：测试；工作流：内置 · 测试（走流程共 11 个环节）。')
-        expect(result).toContain('依赖清单（测试用得到的 4 项）：')
+        expect(result).toContain('依赖清单（测试用得到的 5 项）：')
         expect(result).toContain('7. execute 执行测试')
         expect(result).toContain(`各项目通用的记进通用资料目录 ${SHARED}；只属于本项目的记进项目资料目录 ${global.dir}`)
         expect(result).toContain('本项目概况\n项目：fg-demo（没设显示名，用目录名）')
@@ -4472,7 +4472,7 @@ describe('0.8.0：体检与演练', () => {
         expect((await callGuide($, { action: 'go' })).deny).toBe('小小黎：参数不对，action 只能是 start、check、finish，没有写入')
         expect((await callGuide($, { action: 'check' })).deny).toBe('小小黎：参数不对，check 要给 results 对象，如 { "tapd": "ok", "figma": "missing" }，没有写入')
         expect((await callGuide($, { action: 'check', results: { foo: 'ok', tapd: 'yes' } })).deny).toBe(
-            '小小黎：results 里没有可记的结果（键要是依赖清单里的 id：tapd、li-yuque-skills、chrome-devtools、figma、context7、git、node；值只能是 ok、missing、skipped），没有写入'
+            '小小黎：results 里没有可记的结果（键要是依赖清单里的 id：tapd、li-yuque-skills、chrome-devtools、figma、context7、git、node、uv；值只能是 ok、missing、skipped），没有写入'
         )
         expect((await callGuide($, { action: 'finish', summary: 1 })).deny).toBe('小小黎：参数不对，summary 要是文字，没有写入')
         expect((await callGuide($, { action: 'check', results: { tapd: 'ok' } })).deny).toBe(`小小黎：${ENV_PATH} 是更新版本的 mod 写的，先更新 mod，没有写入`)

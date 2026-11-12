@@ -9,7 +9,14 @@
             "detect": "会话里有 mcp__tapd__ 开头的工具（服务器名必须是 tapd）",
             "install": "claude mcp add tapd -e TAPD_ACCESS_TOKEN=<令牌> -- uvx mcp-server-tapd",
             "account": "需要 TAPD 个人访问令牌，在 TAPD 的个人设置里申请",
-            "roles": ["frontend", "backend", "python", "test", "product", "other"]
+            "roles": [
+                "frontend",
+                "backend",
+                "python",
+                "test",
+                "product",
+                "other"
+            ]
         },
         {
             "id": "li-yuque-skills",
@@ -19,7 +26,14 @@
             "detect": "可用的 skill 里有 li-yuque-skills",
             "install": "npx skills add xiaoli1999/li-yuque-skills -g -a claude-code -y",
             "account": "第一次使用要登录语雀一次",
-            "roles": ["frontend", "backend", "python", "test", "product", "other"]
+            "roles": [
+                "frontend",
+                "backend",
+                "python",
+                "test",
+                "product",
+                "other"
+            ]
         },
         {
             "id": "chrome-devtools",
@@ -28,7 +42,11 @@
             "use": "浏览器自测、执行测试用例、验收",
             "detect": "会话里有 mcp__chrome-devtools__ 开头的工具",
             "install": "claude mcp add chrome-devtools -- npx -y chrome-devtools-mcp@latest",
-            "roles": ["frontend", "test", "product"]
+            "roles": [
+                "frontend",
+                "test",
+                "product"
+            ]
         },
         {
             "id": "figma",
@@ -38,7 +56,10 @@
             "detect": "会话里有 mcp__figma__ 开头的工具",
             "install": "claude mcp add figma -e FIGMA_API_KEY=<令牌> -- npx -y figma-developer-mcp --stdio",
             "account": "需要 Figma 个人访问令牌",
-            "roles": ["frontend", "product"]
+            "roles": [
+                "frontend",
+                "product"
+            ]
         },
         {
             "id": "context7",
@@ -47,7 +68,11 @@
             "use": "查三方库的最新文档",
             "detect": "会话里有 mcp__context7__ 开头的工具",
             "install": "claude mcp add context7 -- npx -y @upstash/context7-mcp",
-            "roles": ["frontend", "backend", "python"]
+            "roles": [
+                "frontend",
+                "backend",
+                "python"
+            ]
         },
         {
             "id": "git",
@@ -55,7 +80,11 @@
             "title": "git",
             "use": "建分支、提交",
             "detect": "运行 git --version 有输出",
-            "roles": ["frontend", "backend", "python"]
+            "roles": [
+                "frontend",
+                "backend",
+                "python"
+            ]
         },
         {
             "id": "node",
@@ -63,7 +92,30 @@
             "title": "Node.js",
             "use": "运行 npx 安装和启动上面的 MCP 与 skill",
             "detect": "运行 node --version 有输出",
-            "roles": ["frontend", "backend", "python", "test", "product", "other"]
+            "roles": [
+                "frontend",
+                "backend",
+                "python",
+                "test",
+                "product",
+                "other"
+            ]
+        },
+        {
+            "id": "uv",
+            "kind": "cli",
+            "title": "uv",
+            "use": "启动 TAPD 的 MCP 服务器（uvx）",
+            "detect": "运行 uvx --version 有输出",
+            "install": "按 uv 官方文档安装（Windows 可用 winget install astral-sh.uv）",
+            "roles": [
+                "frontend",
+                "backend",
+                "python",
+                "test",
+                "product",
+                "other"
+            ]
         }
     ]
 }
