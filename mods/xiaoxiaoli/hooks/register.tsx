@@ -6,7 +6,9 @@
  * 这台机器第一次在交互式会话里全新启动时自动发起一次设置引导（档案里记标记，只发一次）；按工种与工作流开工：
  * 新条目的步骤取当时生效的工作流（项目自定义 → 个人自定义 → 内置工种），不建分支的工种在项目目录直接起新会话，
  * AI 经 mcp__xiaoxiaoli__workflow 查看与调整工作流，/xiaoxiaoli role 改工种；项目差异（显示名、用到的系统）存全局项目配置，
- * 经 mcp__xiaoxiaoli__project 与 /xiaoxiaoli project 查看与修改，记着不用 TAPD 的项目不调 TAPD；开工给出通用与项目两处资料目录
+ * 经 mcp__xiaoxiaoli__project 与 /xiaoxiaoli project 查看与修改，记着不用 TAPD 的项目不调 TAPD；开工给出通用与项目两处资料目录；
+ * 体检与演练：设置引导多问一步、/xiaoxiaoli tour 与面板「走一遍演练」让 AI 调 mcp__xiaoxiaoli__guide，start 放演示条目并给脚本，
+ * check 记体检结果（全局根目录 env.json），finish 收尾并在档案里记演练已走过；面板「不用了」记进档案不再显示
  * @author xiao li
  * @createDate 2026-10-21 18:05
  */
@@ -15,6 +17,7 @@ import type { EngineInterface, HookFailure, Register, RenderSurface, Timer } fro
 import type {
     ActiveWorkflowType,
     BindStateType,
+    EnvStateType,
     IterationStateType,
     LaunchType,
     PaneWant,
@@ -32,6 +35,7 @@ import type {
 } from '../types'
 import {
     buildBoard,
+    clockText,
     iterationFilterId,
     todayText,
     ACTION_FOCUS,
@@ -42,6 +46,8 @@ import {
     ACTION_SCOPE,
     ACTION_SETUP_SKIP,
     ACTION_SETUP_START,
+    ACTION_TOUR_SKIP,
+    ACTION_TOUR_START,
     BIND_CONFIRM_PREFIX,
     BIND_PREFIX,
     ITERATION_PREFIX,
@@ -82,6 +88,24 @@ import {
 } from './project'
 import type { ResourceDirType } from './project'
 import {
+    DEPS_FILE,
+    ENV_FILE,
+    TOUR_FILE,
+    checkReplyText,
+    depsOfRole,
+    envStateOf,
+    envText,
+    newDemoTask,
+    parseDeps,
+    parseEnv,
+    parseTour,
+    toCheckResults,
+    toGuideInput,
+    tourScript,
+    tourStepsOf
+} from './guide'
+import type { DepsParseType, TourParseType } from './guide'
+import {
     WORKFLOW_DIR,
     WORKFLOW_FILE,
     checkWorkflow,
@@ -103,18 +127,22 @@ import {
     PROFILE_NEWER_TEXT,
     ROLE_CHOICES_TEXT,
     ROLE_TITLES,
+    TOUR_SUMMARY_LIMIT,
     WORK_ROLES,
     checkName,
     fullNameOf,
     guidedByOf,
     isSetupPending,
+    isTourOffered,
+    isTourPending,
     nameOf,
     noticeText,
     parseProfile,
     profileText,
     roleOf,
     setupPrompt,
-    toRole
+    toRole,
+    tourPrompt
 } from './profile'
 import type { ProfileChangeType } from './profile'
 import {
@@ -131,6 +159,7 @@ import {
 } from './tapd'
 import type { TapdCall, TapdErrorKind, WorkspaceType } from './tapd'
 import {
+    DEMO_ID,
     MOD_CONFIG_FILE,
     PROGRESS_KINDS,
     STEP_STATUSES,
@@ -139,6 +168,7 @@ import {
     baseName,
     findStepTask,
     findTask,
+    isDemoTask,
     joinPath,
     newTask,
     paneChange,
@@ -173,6 +203,9 @@ const WORKFLOW_TOOL_PATTERN = /^mcp__xiaoxiaoli__workflow$/
 /** 查看与修改项目差异（显示名、用到的系统）的工具：注册名，与匹配全名 mcp__xiaoxiaoli__project 的正则（原因同起名工具） */
 const PROJECT_TOOL = 'project'
 const PROJECT_TOOL_PATTERN = /^mcp__xiaoxiaoli__project$/
+/** 体检与演练的工具：注册名，与匹配全名 mcp__xiaoxiaoli__guide 的正则（原因同起名工具） */
+const GUIDE_TOOL = 'guide'
+const GUIDE_TOOL_PATTERN = /^mcp__xiaoxiaoli__guide$/
 /** 轮询 XIAOXIAOLI_PANE 的间隔 */
 const ENV_POLL_MS = 500
 /** 读 state.json 的间隔 */
@@ -184,7 +217,8 @@ const USAGE_TEXT = [
     '用法 /xiaoxiaoli show 打开侧栏 · hide 收起 · refresh 重读配置并刷新待办 · unbind 解除本项目的全局 TAPD 绑定',
     ' · setup 让 AI 引导给工作台起名（没绑定 TAPD 的项目顺带问绑定） · name <名字> 直接改名',
     ` · role <工种> 设工种（${ROLE_CHOICES_TEXT}）`,
-    ' · project 看本项目的配置概况（显示名、TAPD、用到的系统、资料目录）'
+    ' · project 看本项目的配置概况（显示名、TAPD、用到的系统、资料目录）',
+    ' · tour 让 AI 带你走一遍演练（体检本机环境、按工作流模拟走一遍、讲功能点）'
 ].join('')
 /** 本项目记着不用 TAPD（systems.tapd 为 false）时 refresh 的说法 */
 const TAPD_OFF_REPLY = '本项目记着不用 TAPD（systems.tapd 为 false），不列 TAPD 项目、不拉待办，进行中区照常；要用时对 AI 说「这个项目用 TAPD」'
@@ -240,6 +274,24 @@ const PROJECT_DESCRIPTION = [
     '其余键本 mod 不解释，供你判断哪些环节跳过（如 yuque=false 时不读语雀）。各项目通用的资料（resources.md、secrets.env）放通用资料目录，和通用不一样的放项目资料目录。',
     '项目内模式（项目里有 docs/xiaoli/local/workbench/config.json）不支持 set。'
 ].join('')
+const GUIDE_DESCRIPTION = [
+    '小小黎工作台：体检与演练。只有用户要走一遍演练时才调 start：设置引导里问过并同意、点了面板上的「走一遍演练」、输入 /xiaoxiaoli tour，',
+    '或说「带我走一遍」「带我熟悉一下工作台」；别的时候不要调。start 在面板进行中区放一条演示条目（ID demo，标题「【演练】熟悉工作台」，',
+    '步骤取当前生效工作流的需求步骤，记到本会话，已有的会重置），返回完整的演练脚本（总规则、体检与本工种的依赖清单、按工作流逐环节的走法、',
+    '功能点、收尾、本项目概况），照它走；演示条目的进度用 mcp__xiaoxiaoli__progress 推进，id 传 demo。',
+    '体检做完调 check：results 的键是依赖清单里的 id，值 ok（有）、missing（缺）或 skipped（用户选以后再配），记进全局根目录的 env.json',
+    '（~/.claude/xiaoxiaoli/env.json），不认识的 id 丢掉。演练走完或用户叫停时调 finish：移除演示条目，在 profile.json 里记下演练已走过，',
+    '可带 summary（一两句小结，存进档案）；没有演示条目也照样记。演练不建分支、不提交、不改 TAPD。'
+].join('')
+const GUIDE_SCHEMA = {
+    type: 'object',
+    properties: {
+        action: { type: 'string', enum: ['start', 'check', 'finish'] },
+        results: { type: 'object', description: 'check 必填：{ 依赖 id: "ok" | "missing" | "skipped" }，如 { "tapd": "ok", "figma": "missing" }' },
+        summary: { type: 'string', description: 'finish 时可选：演练小结，一两句话' }
+    },
+    required: ['action']
+}
 const PROJECT_SCHEMA = {
     type: 'object',
     properties: {
@@ -294,12 +346,13 @@ const PROGRESS_DESCRIPTION = [
     '用 module、moduleDone、moduleTotal 记其下的模块，模块名取提交标题里的模块序号（如 界面2、接口7）。',
     '子项记成进行中（taskStatus=doing）时，只有这一步未开始、且后面没有已完成或进行中的步骤才顺带把它推成进行中，其余情况只挂子项、不改任何步骤的状态。',
     'waiting 标等用户拍板的点（align 对齐稿、review 看自测、tapd 批准改 TAPD、none 清掉）；note 记等别人的事；',
-    'bindSession=true 把需求记到本会话；remove=true 移除需求（演示收尾用）。'
+    'bindSession=true 把需求记到本会话；remove=true 移除需求（演示收尾用）。',
+    '演练时的演示条目 id 为 demo：由 mcp__xiaoxiaoli__guide 的 start 建、finish 移除，这里只能推进，不能新建。'
 ].join('')
 const PROGRESS_SCHEMA = {
     type: 'object',
     properties: {
-        id: { type: 'string', description: '需求或缺陷的 TAPD 短 ID，如 1046775' },
+        id: { type: 'string', description: `需求或缺陷的 TAPD 短 ID，如 1046775；演练的演示条目传 ${DEMO_ID}` },
         kind: { type: 'string', enum: [...PROGRESS_KINDS], description: '新建条目时用：story 需求（默认）、bug 缺陷' },
         title: { type: 'string', description: '标题；state.json 里还没有这个条目时必填' },
         step: { type: 'string', description: '步骤键，取这个条目自己的（键取自工作流）' },
@@ -358,6 +411,8 @@ const isStarted = atom({ plugin: 'xiaoxiaoli', key: 'isStarted' } as const, fals
 const startSource = atom({ plugin: 'xiaoxiaoli', key: 'startSource' } as const, '')
 /** 当前项目生效的工作流：会话启动、刷新、开工、改工种与工作流时重读 */
 const workflowState = atom({ plugin: 'xiaoxiaoli', key: 'workflow' } as const, null)
+/** 上次体检的结果（按当前工种算）：会话启动、刷新、体检、改工种时重读 */
+const envState = atom({ plugin: 'xiaoxiaoli', key: 'env' } as const, null)
 
 /* 模块变量：热重载后清空，session.start 会重新建立 */
 /** 上次读到的 XIAOXIAOLI_PANE，变了才动面板 */
@@ -652,6 +707,45 @@ const ensureSharedDir = async ($: Dollar): Promise<string> => {
     }
 }
 
+/** 读 mod 目录下的依赖清单 guide/deps.json，读不到或不合格时为原因 */
+const readDeps = async ($: Dollar): Promise<DepsParseType> => parseDeps(await readText($, joinPath($.plugin.root, DEPS_FILE)))
+
+/** 读 mod 目录下的演练脚本 guide/tour.json，读不到或不合格时为原因 */
+const readTour = async ($: Dollar): Promise<TourParseType> => parseTour(await readText($, joinPath($.plugin.root, TOUR_FILE)))
+
+/**
+ * 重读上次体检的结果并记进 $.state：读全局根目录下的 env.json，按当前工种用得到的依赖算出缺的与跳过的（依赖清单不能用时按结果里的 id 算）；
+ * 没体检过、取不到全局根目录为 null。内容没变不写。
+ * @param $ 引擎接口
+ * @returns 体检结果
+ */
+const loadEnv = async ($: Dollar): Promise<EnvStateType | null> => {
+    const globalRoot = await readGlobalRoot($)
+    const record = globalRoot === '' ? undefined : parseEnv(await readText($, joinDir(globalRoot, ENV_FILE)))
+    let next: EnvStateType | null = null
+    if (record !== undefined && record.checkedAt !== '') {
+        const deps = await readDeps($)
+        next = envStateOf('reason' in deps ? null : depsOfRole(deps.depList, roleOf(await read($, profile))), record)
+    }
+    if (JSON.stringify(await read($, envState)) !== JSON.stringify(next)) await update($, envState, () => next)
+
+    return next
+}
+
+/**
+ * 设置引导里要不要多问一步「走一遍演练」：档案里演练还没处理过，且演练脚本能用。
+ * @param $ 引擎接口
+ * @param state 现读的档案
+ * @returns 是否问
+ */
+const isTourAsked = async ($: Dollar, state: ProfileStateType): Promise<boolean> => isTourPending(state) && 'tour' in (await readTour($))
+
+/** 体检时间给人看的写法：当地日期加时分，读不懂原样 */
+const checkedTextOf = (checkedAt: string): string => {
+    const ms = Date.parse(checkedAt)
+    return Number.isNaN(ms) ? checkedAt : `${todayText(ms)} ${clockText(ms)}`
+}
+
 /** 按配置的分钟数定时刷新；分钟数变了就重排定时器 */
 const scheduleRefresh = ($: Dollar, minutes: number) => {
     if (minutes === refreshMinutes && refreshTimer !== undefined) return
@@ -797,10 +891,11 @@ const refreshTodos = async ($: Dollar): Promise<void> => {
     /* loadTodos 正常返回的错误类型只来自迭代，抛出的才是待办整轮失败 */
     let isIterationOnly = false
     try {
-        /* 顺带重读档案与工作流：别的会话改了名、工种或工作流，这边刷新时跟上 */
+        /* 顺带重读档案、工作流与体检结果：别的会话改了名、工种、工作流或刚体检过，这边刷新时跟上 */
         await loadProfile($)
         const current = await loadConfig($)
         await loadWorkflow($)
+        await loadEnv($)
         /* 记着不用 TAPD 的项目不调 TAPD：既不列参与的项目，也不拉待办 */
         if (isTapdOff(await read($, workplace))) failedKind = await clearForTapdOff($)
         else failedKind = current === null ? await loadBindList($) : await loadTodos($, current)
@@ -1381,6 +1476,8 @@ const runSetupTool = async ($: Dollar, raw: Record<string, unknown>): Promise<{ 
 
     const saved = await saveProfile($, change)
     if ('reason' in saved) return { deny: await say($, `${saved.reason}，没有写入`) }
+    /* 换了工种，面板上的体检缺项按新工种的依赖重算 */
+    if (role !== undefined) await loadEnv($)
 
     const partList = [
         ...(checked === undefined ? [] : [`工作台现在叫 ${fullNameOf(checked.name)}`]),
@@ -1410,6 +1507,7 @@ const runRoleCommand = async ($: Dollar, value: string): Promise<string> => {
 
     const saved = await saveProfile($, { role })
     if ('reason' in saved) return say($, `没改，${saved.reason}，没有写入`)
+    await loadEnv($)
 
     return say($, `已改，${roleEffectText(role, await loadWorkflow($))}（写入 ${saved.path}）`)
 }
@@ -1494,23 +1592,25 @@ const isUnboundNow = async ($: Dollar): Promise<boolean> => {
 }
 
 /**
- * 命令里发起的设置引导，在下一拍发出：失败时记日志并提示，不抛出。
+ * 命令里发起的设置引导或演练，在下一拍发出：失败时记日志并提示，不抛出。
  * @param $ 引擎接口
- * @param text 设置引导那段话
+ * @param text 发出的那段话
+ * @param what 提示里怎么称呼它，如「设置引导」「演练」
+ * @param retry 没发出去时告诉用户怎么办
  */
-const submitSetupLater = async ($: Dollar, text: string): Promise<void> => {
+const submitLater = async ($: Dollar, text: string, what: string, retry: string): Promise<void> => {
     try {
         await $.prompt.submit({ text, asUser: true })
     } catch (cause) {
-        $.ui.log(`设置引导没发出去：${describeError(cause)}`, { to: 'debug' })
-        $.ui.toast(await say($, '设置引导没发出去，稍后再运行 /xiaoxiaoli setup，或直接用 /xiaoxiaoli name <名字> 改名'))
+        $.ui.log(`${what}没发出去：${describeError(cause)}`, { to: 'debug' })
+        $.ui.toast(await say($, `${what}没发出去，${retry}`))
     }
 }
 
 /**
- * 「开始设置」与 /xiaoxiaoli setup：现读档案与配置，往会话里发一段话让 AI 用 AskUserQuestion 问名字（没绑定 TAPD 时顺带问绑定）。
- * 面板上点的立即发出，会话正忙时排到这一轮之后（同开工）；命令里不能直接发（引擎拦：会等这条命令占着的那一轮），
- * 排到下一拍再发，正忙时同样由引擎排队。取不到全局根目录、档案版本比本 mod 新时不发，如实说明。
+ * 「开始设置」与 /xiaoxiaoli setup：现读档案与配置，往会话里发一段话让 AI 用 AskUserQuestion 问名字（没绑定 TAPD 时顺带问绑定，
+ * 演练还没处理过时保存后再问要不要走演练）。面板上点的立即发出，会话正忙时排到这一轮之后（同开工）；命令里不能直接发
+ * （引擎拦：会等这条命令占着的那一轮），排到下一拍再发，正忙时同样由引擎排队。取不到全局根目录、档案版本比本 mod 新时不发，如实说明。
  * @param $ 引擎接口
  * @param isFromCommand 是否由 /xiaoxiaoli setup 发起
  * @returns 给用户的提示
@@ -1521,11 +1621,42 @@ const startSetup = async ($: Dollar, isFromCommand = false): Promise<string> => 
     if (state.isNewer) return say($, `${PROFILE_NEWER_TEXT}，没有发起设置`)
 
     const isUnbound = await isUnboundNow($)
-    const text = setupPrompt({ name: state.name, role: state.role, isUnbound, projectName: (await read($, workplace))?.name ?? '' })
+    const projectName = (await read($, workplace))?.name ?? ''
+    const text = setupPrompt({ name: state.name, role: state.role, isUnbound, projectName, isTourOffered: await isTourAsked($, state) })
     if (!isFromCommand) return submitPrompt($, text, '设置工作台', await read($, turnBusy))
 
-    $.clock.after(1, () => void submitSetupLater($, text))
+    $.clock.after(1, () => void submitLater($, text, '设置引导', '稍后再运行 /xiaoxiaoli setup，或直接用 /xiaoxiaoli name <名字> 改名'))
     return say($, '已发出：设置工作台')
+}
+
+/**
+ * 面板「走一遍演练」与 /xiaoxiaoli tour：往会话里发一段话，让 AI 调 mcp__xiaoxiaoli__guide 的 start、照脚本带着走。
+ * 发法同「开始设置」：面板上点的立即发出（会话正忙时排队），命令里排到下一拍再发。演练脚本 guide/tour.json 不能用时不发，如实说明。
+ * 演练做过、选过不用的也能再走（就是「怎么重来」）。
+ * @param $ 引擎接口
+ * @param isFromCommand 是否由 /xiaoxiaoli tour 发起
+ * @returns 给用户的提示
+ */
+const startTour = async ($: Dollar, isFromCommand = false): Promise<string> => {
+    const tour = await readTour($)
+    if ('reason' in tour) return say($, `演练脚本 ${TOUR_FILE} 不能用（${tour.reason}），没有发起演练`)
+
+    const text = tourPrompt()
+    if (!isFromCommand) return submitPrompt($, text, '走一遍演练', await read($, turnBusy))
+
+    $.clock.after(1, () => void submitLater($, text, '演练', '稍后再运行 /xiaoxiaoli tour'))
+    return say($, '已发出：走一遍演练')
+}
+
+/**
+ * 面板上点「不用了」：现读一遍档案，仍是该出演练引导的才写 tour: declined（别的会话刚走过就不覆盖）；之后两行消失、不再显示。
+ * @param $ 引擎接口
+ */
+const skipTour = async ($: Dollar): Promise<void> => {
+    if (!isTourOffered(await loadProfile($))) return
+
+    const saved = await saveProfile($, { tour: 'declined', tourAt: new Date(await $.clock.now()).toISOString() })
+    $.ui.toast(await say($, 'reason' in saved ? `没记下「不用了」，${saved.reason}` : '好的，不走演练，面板上不再提示；以后想走输入 /xiaoxiaoli tour'))
 }
 
 /**
@@ -1597,7 +1728,8 @@ const autoGuide = async ($: Dollar): Promise<void> => {
         if (guidedByOf(await readText($, saved.path)) !== token) return skip('标记被别的会话抢先记了')
 
         const projectName = (await read($, workplace))?.name ?? ''
-        const text = setupPrompt({ name: state.name, role: state.role, isUnbound: await isUnboundNow($), projectName, isAuto: true })
+        const isTourNow = await isTourAsked($, state)
+        const text = setupPrompt({ name: state.name, role: state.role, isUnbound: await isUnboundNow($), projectName, isAuto: true, isTourOffered: isTourNow })
         await $.prompt.submit({ text, asUser: true })
         $.ui.toast(await say($, SETUP_AUTO_TEXT))
     } catch (cause) {
@@ -1653,8 +1785,8 @@ const runLaunchAction = async ($: Dollar, action: string, surface: RenderSurface
 }
 
 /**
- * 面板里点中一行：首次引导的「开始设置」「先不设」、进出沉浸、刷新、切视图、展开或选迭代、选中待办、确认开工、启动命令的按钮、
- * 选中与确认绑定的 TAPD 项目；点其他地方取消高亮并收起迭代列表。
+ * 面板里点中一行：首次引导的「开始设置」「先不设」、演练引导的「走一遍演练」「不用了」、进出沉浸、刷新、切视图、展开或选迭代、
+ * 选中待办、确认开工、启动命令的按钮、选中与确认绑定的 TAPD 项目；点其他地方取消高亮并收起迭代列表。
  * @param $ 引擎接口
  * @param action 那一行的动作
  * @param surface 点的表面，复制命令时用
@@ -1666,6 +1798,14 @@ const runAction = async ($: Dollar, action: string, surface: RenderSurface): Pro
         if (action === ACTION_SETUP_SKIP) return skipSetup($)
 
         $.ui.toast(await startSetup($))
+        return
+    }
+    /* 演练引导的两个按钮：同上，只在该出演练引导时认 */
+    if (action === ACTION_TOUR_START || action === ACTION_TOUR_SKIP) {
+        if (!isTourOffered(await read($, profile))) return
+        if (action === ACTION_TOUR_SKIP) return skipTour($)
+
+        $.ui.toast(await startTour($))
         return
     }
     /* 进出沉浸放在最前面：选中的待办、绑定项目、迭代与启动命令都原样留着，退出后照旧 */
@@ -1734,7 +1874,7 @@ const resourceDirOf = async ($: Dollar, path: string): Promise<ResourceDirType> 
 }
 
 /**
- * 本项目概况（project 工具的 get 与 /xiaoxiaoli project 共用）：现读配置、档案与工作流，资料文件只看在不在。
+ * 本项目概况（project 工具的 get、/xiaoxiaoli project 与演练脚本共用）：现读配置、档案、工作流与体检结果，资料文件只看在不在。
  * @param $ 引擎接口
  * @returns 多行文字
  */
@@ -1742,6 +1882,7 @@ const projectSummary = async ($: Dollar): Promise<string> => {
     const current = await loadConfig($)
     const state = await loadProfile($)
     const active = await loadWorkflow($)
+    const env = await loadEnv($)
     const place = await read($, workplace)
     const sharedDir = await sharedDirOf($)
     const isRepoMode = place?.mode !== 'global'
@@ -1758,9 +1899,144 @@ const projectSummary = async ($: Dollar): Promise<string> => {
         data: isRepoMode || place === null ? null : await resourceDirOf($, place.dataDir),
         workflowLabel: active.label,
         fullName: fullNameOf(nameOf(state)),
-        role: { title: ROLE_TITLES[roleOf(state)], isDefault: state.role === '' }
+        role: { title: ROLE_TITLES[roleOf(state)], isDefault: state.role === '' },
+        guide: {
+            checkedText: env === null ? '' : checkedTextOf(env.checkedAt),
+            missingList: env?.missingList ?? [],
+            skippedList: env?.skippedList ?? [],
+            tour: state.tour ?? ''
+        }
     })
 }
+
+/**
+ * 演练 start：现读演练脚本、项目、状态文件、档案与工作流；在状态文件里放一条演示条目（已有的重置，记到本会话），
+ * 再把脚本（总规则、体检与本工种的依赖、按工作流逐环节的走法、功能点、收尾、本项目概况）回给 AI。
+ * 演练脚本不能用、还没定下项目、状态文件读不懂或写失败都如实拒绝，不建演示条目；依赖清单不能用时照常开始，脚本里说明跳过体检。
+ * @param $ 引擎接口
+ * @returns 给模型的结果，不能开始时为 deny
+ */
+const runGuideStart = async ($: Dollar): Promise<{ result: string } | { deny: string }> => {
+    const tour = await readTour($)
+    if ('reason' in tour) return { deny: await say($, `演练脚本 ${TOUR_FILE} 不能用（${tour.reason}），没有建演示条目`) }
+
+    await loadConfig($)
+    const place = await read($, workplace)
+    if (place === null) return { deny: await say($, '还没定下当前项目，稍后再试，没有建演示条目') }
+
+    const taskList = await readTasks($, place)
+    if (typeof taskList === 'string') return { deny: await say($, `${taskList}，没有建演示条目`) }
+
+    const state = await loadProfile($)
+    const active = await loadWorkflow($)
+    const updatedAt = new Date(await $.clock.now()).toISOString()
+    const demo = newDemoTask({ flow: flowOf(active, 'story'), updatedAt, sessionId: place.sessionId })
+    const failed = await writeTasks($, place, upsertTask(taskList, demo, taskList.find(isDemoTask)))
+    if (failed) return { deny: await say($, `${failed}，没有建演示条目`) }
+
+    const role = roleOf(state)
+    const deps = await readDeps($)
+    const script = tourScript({
+        tour: tour.tour,
+        deps: 'reason' in deps ? deps : { ...deps, depList: depsOfRole(deps.depList, role) },
+        roleTitle: ROLE_TITLES[role],
+        workflowLabel: active.label,
+        /* 演练脚本里「<工作流 id>:<步骤键>」的 id：定义里写了 id 用它（内置为工种 id），没写用来源（project、personal） */
+        stepList: tourStepsOf(tour.tour, active.workflow.id ?? active.id, active.workflow.story),
+        sharedDir: await sharedDirOf($),
+        dataDir: place.mode === 'global' ? place.dataDir : '',
+        overview: await projectSummary($)
+    })
+    return { result: script }
+}
+
+/**
+ * 演练 check：按依赖清单整理体检结果（不认识的 id、值不对的丢掉），整份写进全局根目录的 env.json（别的字段保留），重读给面板。
+ * 依赖清单不能用、没有可记的结果、取不到全局根目录、env.json 版本比本 mod 新、写失败都如实拒绝，不写入。
+ * @param $ 引擎接口
+ * @param results 原始结果
+ * @returns 给模型的结果，不能写时为 deny
+ */
+const runGuideCheck = async ($: Dollar, results: Record<string, unknown>): Promise<{ result: string } | { deny: string }> => {
+    const deps = await readDeps($)
+    if ('reason' in deps) return { deny: await say($, `依赖清单 ${DEPS_FILE} 不能用（${deps.reason}），体检结果对不上，没有写入`) }
+
+    const checked = toCheckResults(results, deps.depList)
+    if (!Object.keys(checked.results).length) {
+        const idText = deps.depList.map(i => i.id).join('、')
+        return { deny: await say($, `results 里没有可记的结果（键要是依赖清单里的 id：${idText}；值只能是 ok、missing、skipped），没有写入`) }
+    }
+
+    const globalRoot = await readGlobalRoot($)
+    if (globalRoot === '') return { deny: await say($, `${NO_GLOBAL_ROOT_TEXT}，体检结果存不了，没有写入`) }
+
+    const path = joinDir(globalRoot, ENV_FILE)
+    const oldText = await readText($, path)
+    if (parseEnv(oldText).isNewer) return { deny: await say($, `${path} 是更新版本的 mod 写的，先更新 mod，没有写入`) }
+
+    try {
+        await $.fs.write(path, envText(oldText, { checkedAt: new Date(await $.clock.now()).toISOString(), results: checked.results }))
+    } catch (cause) {
+        return { deny: await say($, `写 ${path} 失败（${describeError(cause)}），没有写入`) }
+    }
+    await loadEnv($)
+
+    return { result: checkReplyText(path, checked, deps.depList) }
+}
+
+/**
+ * 演练 finish：移除演示条目（没有就不用清），在 profile.json 里记演练已走过（带了小结一并存，超长只存前 500 个字符），面板上不再出演练引导。
+ * 两件都没做成时拒绝并说明原因；做成一件就照实回，另一件的原因写在后面。
+ * @param $ 引擎接口
+ * @param summary 演练小结
+ * @returns 给模型的结果，都没写成时为 deny
+ */
+const runGuideFinish = async ($: Dollar, summary?: string): Promise<{ result: string } | { deny: string }> => {
+    const doneList: string[] = []
+    const failList: string[] = []
+    await loadConfig($)
+    const place = await read($, workplace)
+    const taskList = place === null ? '还没定下当前项目' : await readTasks($, place)
+    if (typeof taskList === 'string') {
+        failList.push(`${taskList}，演示条目没清`)
+    } else if (place !== null && taskList.some(isDemoTask)) {
+        const failed = await writeTasks($, place, taskList.filter(i => !isDemoTask(i)))
+        if (failed) failList.push(`${failed}，演示条目没清`)
+        else doneList.push(`已移除演示条目（写入 ${place.statePath}）`)
+    }
+
+    const tourAt = new Date(await $.clock.now()).toISOString()
+    /* 取不到全局根目录时 saveProfile 的说法是讲起名的，这里换成直说 */
+    const saved =
+        (await readGlobalRoot($)) === ''
+            ? { reason: NO_GLOBAL_ROOT_TEXT }
+            : await saveProfile($, { tour: 'done', tourAt, ...(summary === undefined ? {} : { summary }) })
+    const isLong = summary !== undefined && [...summary.trim()].length > TOUR_SUMMARY_LIMIT
+    if ('reason' in saved) failList.push(`演练走过没记下：${saved.reason}`)
+    else doneList.push(`已记下演练走过${summary?.trim() ? '与小结' : ''}（写入 ${saved.path}${isLong ? `；小结超过 ${TOUR_SUMMARY_LIMIT} 个字符，只存了前 ${TOUR_SUMMARY_LIMIT} 个` : ''}），面板上不再出演练引导`)
+    if (!doneList.length) return { deny: await say($, `${failList.join('；')}，没有写入`) }
+
+    return { result: [...doneList, ...failList].join('；') }
+}
+
+/**
+ * 主会话调 mcp__xiaoxiaoli__guide：校验参数后按 action 走 start、check、finish。
+ * @param $ 引擎接口
+ * @param raw 工具参数
+ * @returns 给模型的结果，不能做时为 deny
+ */
+const runGuideTool = async ($: Dollar, raw: Record<string, unknown>): Promise<{ result: string } | { deny: string }> => {
+    const input = toGuideInput(raw)
+    if (typeof input === 'string') return { deny: await say($, `参数不对，${input}，没有写入`) }
+    if (input.action === 'start') return runGuideStart($)
+    if (input.action === 'check') return runGuideCheck($, input.results)
+
+    return runGuideFinish($, input.summary)
+}
+
+/** 演练工具的钩子本身失败时回给模型的话，口径同进度工具 */
+const guideFailure = ($: Dollar, error: HookFailure): Promise<string> =>
+    toolFailure($, error, { tool: '演练工具', file: '状态文件、全局根目录的 env.json 与 profile.json' })
 
 /**
  * 主会话调 mcp__xiaoxiaoli__project：get 返回本项目概况；set 改显示名与 systems，写全局项目配置（别的字段原样保留）后重读配置、
@@ -1841,7 +2117,7 @@ const refreshReply = async ($: Dollar): Promise<string> => {
 /**
  * /xiaoxiaoli 的参数：show / hide 开关面板并同步环境变量，refresh 重读配置并刷新待办，unbind 解除本项目的全局绑定，
  * setup 让 AI 引导起名（同面板「开始设置」），name [名字] 不经 AI 直接改名或看当前名字，role [工种] 直接改工种或看当前工种，
- * project 不经 AI 直接打印本项目概况（同 project 工具的 get）。
+ * project 不经 AI 直接打印本项目概况（同 project 工具的 get），tour 让 AI 带着走一遍演练（同面板「走一遍演练」）。
  * @param $ 引擎接口
  * @param arg 命令参数
  * @param isAsked 是否用户亲自敲的命令（别的插件代跑为 false）
@@ -1860,6 +2136,7 @@ const runCommand = async ($: Dollar, arg: string, isAsked: boolean): Promise<str
     if (sub === 'name') return runNameCommand($, rest)
     if (sub === 'role') return runRoleCommand($, rest)
     if (sub === 'setup') return rest === '' ? startSetup($, true) : say($, 'setup 不带参数；直接改名用 /xiaoxiaoli name <名字>')
+    if (sub === 'tour') return rest === '' ? startTour($, true) : say($, 'tour 不带参数')
     if (arg === 'project') return say($, `本项目概况\n${await projectSummary($)}`)
     if (arg === 'unbind') return unbindProject($)
     if (arg !== 'refresh') return say($, USAGE_TEXT)
@@ -1884,8 +2161,8 @@ export const register: Register = on => {
         await $.command.register({
             name: 'xiaoxiaoli',
             description:
-                '小小黎 AI 工作台：show 打开侧栏，hide 收起，refresh 重读配置并刷新待办，unbind 解除本项目的全局 TAPD 绑定，setup 让 AI 引导给工作台起名，name <名字> 直接改名，role <工种> 设工种，project 看本项目的配置概况',
-            argumentHint: '[show|hide|refresh|unbind|setup|name <名字>|role <工种>|project]'
+                '小小黎 AI 工作台：show 打开侧栏，hide 收起，refresh 重读配置并刷新待办，unbind 解除本项目的全局 TAPD 绑定，setup 让 AI 引导给工作台起名，name <名字> 直接改名，role <工种> 设工种，project 看本项目的配置概况，tour 走一遍演练',
+            argumentHint: '[show|hide|refresh|unbind|setup|name <名字>|role <工种>|project|tour]'
         })
         const stored = await $.store.get('scope')
         const scope: TodoScope | undefined = stored === 'project' || stored === 'all' ? stored : undefined
@@ -1897,9 +2174,11 @@ export const register: Register = on => {
         /* 记着不用 TAPD 的项目不算待绑定：绑定工具照常可用，但放在 ToolSearch 后面 */
         const isUnbound = loaded === null && startPlace?.mode === 'global' && !isTapdOff(startPlace)
         /* 档案独立于项目模式：项目内模式也读全局根目录下的 profile.json */
-        const isPending = isSetupPending(await loadProfile($))
-        /* 工作流要等项目与工种定下再读 */
+        const startProfile = await loadProfile($)
+        const isPending = isSetupPending(startProfile)
+        /* 工作流与体检结果要等项目与工种定下再读 */
         await loadWorkflow($)
+        await loadEnv($)
         try {
             /* 配了 TAPD 的项目把工具放进提示词里的工具列表，其余项目放在 ToolSearch 后面 */
             await $.tool.register({ name: PROGRESS_TOOL, description: PROGRESS_DESCRIPTION, inputSchema: PROGRESS_SCHEMA, isDeferred: loaded === null })
@@ -1929,6 +2208,12 @@ export const register: Register = on => {
             await $.tool.register({ name: PROJECT_TOOL, description: PROJECT_DESCRIPTION, inputSchema: PROJECT_SCHEMA, isDeferred: true })
         } catch (cause) {
             $.ui.log(`项目工具注册失败：${describeError(cause)}`, { to: 'debug' })
+        }
+        try {
+            /* 演练还没处理过（没走过也没选不用）时放进工具列表，设置引导与面板发起演练时 AI 直接能调；其余放在 ToolSearch 后面 */
+            await $.tool.register({ name: GUIDE_TOOL, description: GUIDE_DESCRIPTION, inputSchema: GUIDE_SCHEMA, isDeferred: !isTourPending(startProfile) })
+        } catch (cause) {
+            $.ui.log(`演练工具注册失败：${describeError(cause)}`, { to: 'debug' })
         }
         await readProgress($)
         /* 每次会话启动面板一律收起，开关同步成 hide，小黎的开关随之显示「干活」 */
@@ -1997,6 +2282,10 @@ export const register: Register = on => {
         async ($, e, next) => (next.called ? next(e) : { deny: await projectFailure($, next.error) })
     )
 
+    on('tool.call', { tool: GUIDE_TOOL_PATTERN }, async ($, e) => runGuideTool($, e as unknown as Record<string, unknown>)).catch(
+        async ($, e, next) => (next.called ? next(e) : { deny: await guideFailure($, next.error) })
+    )
+
     on('command.run', { command: 'xiaoxiaoli' }, async ($, e) => {
         const text = await runCommand($, e.args.trim(), e.origin.kind !== 'plugin')
         /* 别的插件（小黎「干活」）代跑的命令不往 transcript 打字，用户亲自敲的照常回文字 */
@@ -2039,7 +2328,9 @@ export const register: Register = on => {
                 binding: await read($, binding),
                 isFocus: await read($, isFocus),
                 name: nameOf(profileState),
-                isSetupPending: isSetupPending(profileState)
+                isSetupPending: isSetupPending(profileState),
+                isTourOffered: isTourOffered(profileState),
+                env: await read($, envState)
             },
             width
         )

@@ -77,8 +77,20 @@ export const STEP_KEY_PATTERN = /^[a-z][a-z0-9-]*$/
 export const STEP_KEY_LIMIT = 32
 /** 需求工作流一共几步，旧结构的 step 按这个校验 */
 export const STEP_COUNT = STORY_STEPS.length
+/**
+ * 演练用的演示条目的 ID：保留值，不是纯数字，和 TAPD 短 ID 撞不上。进度工具只放宽这一个值；
+ * 它不算开工分流的「手上有活」、不和待办对应、不能重新开工，由 mcp__xiaoxiaoli__guide 的 start 建、finish 移除
+ */
+export const DEMO_ID = 'demo'
 /** 分支名与分支起点只许这些字符，免得拼进命令时被 shell 解释 */
 const REF_PATTERN = /^[\w./-]+$/
+
+/**
+ * 是不是演练的演示条目。
+ * @param task 条目
+ * @returns 是否演示条目
+ */
+export const isDemoTask = (task: Pick<ProgressTaskType, 'id'>): boolean => task.id === DEMO_ID
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -539,23 +551,24 @@ export const newTask = ({ id, kind, title, updatedAt, workspaceId, branch, sessi
 
 /**
  * 条目是不是这条待办：短 ID 相同；两边都有 TAPD 项目 ID 时还要求项目 ID 相同，条目没有项目 ID（旧条目、进度工具新建的）只看短 ID。
+ * 演练的演示条目不和任何待办对应。
  * @param task 条目
  * @param id 待办的短 ID
  * @param workspaceId 待办所属的 TAPD 项目 ID，不传只看短 ID
  * @returns 是否对应
  */
 export const isSameTask = (task: ProgressTaskType, id: string, workspaceId?: string): boolean =>
-    task.id === id && (task.workspaceId === undefined || workspaceId === undefined || task.workspaceId === workspaceId)
+    !isDemoTask(task) && task.id === id && (task.workspaceId === undefined || workspaceId === undefined || task.workspaceId === workspaceId)
 
 /**
- * 找待办对应的条目：项目 ID 也对上的优先，其次是没记项目 ID、短 ID 相同的。
+ * 找待办对应的条目：项目 ID 也对上的优先，其次是没记项目 ID、短 ID 相同的；演练的演示条目不算。
  * @param taskList 条目
  * @param id 待办的短 ID
  * @param workspaceId 待办所属的 TAPD 项目 ID，不传只看短 ID
  * @returns 条目，没有为 undefined
  */
 export const findTask = (taskList: readonly ProgressTaskType[], id: string, workspaceId?: string): ProgressTaskType | undefined =>
-    taskList.find(i => i.id === id && workspaceId !== undefined && i.workspaceId === workspaceId) ??
+    taskList.find(i => !isDemoTask(i) && i.id === id && workspaceId !== undefined && i.workspaceId === workspaceId) ??
     taskList.find(i => isSameTask(i, id, workspaceId))
 
 /** 某个条目某一步下挂着的一个子项 */
@@ -569,7 +582,7 @@ export interface StepTaskFoundType {
 
 /**
  * 找挂在某个条目某一步下的 TAPD 任务（第二级子项）：子项 ID 等于待办短 ID，所在条目按 isSameTask 的口径核对项目 ID。
- * 自定义阶段（如「自测」）的 ID 不是纯数字，与待办的短 ID 天然不撞。
+ * 自定义阶段（如「自测」）的 ID 不是纯数字，与待办的短 ID 天然不撞；演练的演示条目下挂的子项不算（演练时挂了真实任务也不和待办对应）。
  * @param taskList 条目
  * @param id 任务的短 ID
  * @param workspaceId 任务所属的 TAPD 项目 ID，不传只看短 ID
@@ -577,6 +590,7 @@ export interface StepTaskFoundType {
  */
 export const findStepTask = (taskList: readonly ProgressTaskType[], id: string, workspaceId?: string): StepTaskFoundType | undefined => {
     for (const task of taskList) {
+        if (isDemoTask(task)) continue
         if (task.workspaceId !== undefined && workspaceId !== undefined && task.workspaceId !== workspaceId) continue
 
         for (const step of task.steps) {
@@ -732,7 +746,7 @@ export const ownsTask = (task: ProgressTaskType, sessionId: string, isMainChecko
 
 /**
  * 状态行文案：只取本会话没做完的条目（没记 sessionId 的旧条目在主工作区的会话里算本会话的），多条时显示第一条，
- * 「另 N 条」只数本会话的；本会话一条没有或取不到会话 ID 时返回 undefined 清掉状态行。开头是工作台的名字。
+ * 「另 N 条」只数本会话的；本会话一条没有或取不到会话 ID 时返回 undefined 清掉状态行。开头是工作台的名字；演练的演示条目写「演练」不写 ID。
  * @param taskList 进行中任务
  * @param sessionId 当前会话 ID
  * @param isMainCheckout 当前会话是否在主工作区
@@ -753,7 +767,7 @@ export const statusText = (
     if (task === undefined || current === undefined) return undefined
 
     const more = openList.length > 1 ? ` · 另 ${openList.length - 1} 条` : ''
-    return `${name} · ${task.id} 第 ${current.no} 步 ${stepLabel(current.step)}${more}`
+    return `${name} · ${isDemoTask(task) ? '演练' : task.id} 第 ${current.no} 步 ${stepLabel(current.step)}${more}`
 }
 
 /** 主会话经 mcp__xiaoxiaoli__progress 推进条目的参数 */
@@ -805,7 +819,7 @@ const DEPEND_LIST = [
 ] as const
 
 /**
- * 校验 mcp__xiaoxiaoli__progress 的参数：参数是模型给的，逐个字段核对。
+ * 校验 mcp__xiaoxiaoli__progress 的参数：参数是模型给的，逐个字段核对。id 只认纯数字的 TAPD 短 ID，外加演示条目的保留值 demo。
  * @param raw 工具参数
  * @returns 参数；不合格返回错误说明
  */
@@ -820,7 +834,7 @@ export const toProgressInput = (raw: Record<string, unknown>): ProgressInputType
     const waiting = raw.waiting === 'none' ? null : WAITING_KINDS.find(i => i === raw.waiting)
     const textList = [raw.title, raw.detail, raw.taskTitle, raw.taskDetail, raw.module, raw.branch, raw.note].map(optionalString)
     const missing = DEPEND_LIST.find(([key, need]) => raw[key] !== undefined && raw[need] === undefined)
-    if (typeof id !== 'string' || !/^\d+$/.test(id)) return 'id 要填需求或缺陷的 TAPD 短 ID（纯数字）'
+    if (typeof id !== 'string' || !(/^\d+$/.test(id) || id === DEMO_ID)) return 'id 要填需求或缺陷的 TAPD 短 ID（纯数字）'
     if (missing !== undefined) return `给了 ${missing[0]} 就要给 ${missing[1]}`
     if (raw.kind !== undefined && kind === undefined) return 'kind 只能是 story、bug'
     if (raw.step !== undefined && step === undefined) return 'step 要填这个条目的步骤键（取自工作流，小写字母开头，只含小写字母、数字与 -）'
@@ -946,7 +960,8 @@ export interface ProgressContextType {
 
 /**
  * 按 mcp__xiaoxiaoli__progress 的参数改需求列表：移除、新建（要 title，按当前生效的工作流建步骤）、推进一步、改步骤下的任务与模块、
- * 改等待、分支、备注与所属会话。step 按这个条目自己的步骤键核，子项只能挂在它的慢环节下。
+ * 改等待、分支、备注与所属会话。step 按这个条目自己的步骤键核，子项只能挂在它的慢环节下。演示条目（demo）只能推进与移除，
+ * 不能经这里新建（要经 mcp__xiaoxiaoli__guide 的 start 建）。
  * @param taskList 现有需求
  * @param input 已校验的参数
  * @param context 更新时间、调用工具的会话 ID、新建条目的步骤
@@ -961,6 +976,7 @@ export const applyProgress = (
     if (input.remove && found === undefined) return `state.json 里没有条目 ${input.id}`
     /* 只移除找到的那一条，不同 TAPD 项目撞了短 ID 的其他条目不动 */
     if (input.remove) return { taskList: taskList.filter(i => i !== found), text: `已移除 ${input.id}` }
+    if (found === undefined && input.id === DEMO_ID) return `state.json 里没有演示条目 ${DEMO_ID}，要先调 mcp__xiaoxiaoli__guide（action 传 start）建`
     if (found === undefined && !input.title) return `state.json 里没有条目 ${input.id}，新建要带 title`
 
     const kind = found?.kind ?? input.kind ?? 'story'

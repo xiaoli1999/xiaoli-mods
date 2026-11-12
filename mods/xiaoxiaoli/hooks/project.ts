@@ -1,9 +1,10 @@
 /**
  * @description 项目差异与通用资料：全局项目配置里的 displayName（面板上显示的名字）与 systems（本项目用不用某个系统）的读取、校验、合并写回，
- * 通用资料目录 shared/ 的约定与说明文字，以及 project 工具 get 的概况文字；纯函数便于测试
+ * 通用资料目录 shared/ 的约定与说明文字，以及 project 工具 get 的概况文字（含体检与演练那一行）；纯函数便于测试
  * @author xiao li
  * @createDate 2026-11-12 20:00
  */
+import type { TourStateType } from '../types'
 
 /** 通用资料目录：全局根目录下，放各项目通用的 resources.md、secrets.env，由 AI 用到时创建和维护，mod 不读内容 */
 export const SHARED_DIR = 'shared'
@@ -206,6 +207,37 @@ export interface ProjectSummaryType {
     fullName: string
     /** 工种中文名与是不是没设（按前端） */
     role: { title: string; isDefault: boolean }
+    /** 体检与演练：不传不写这一行 */
+    guide?: GuideSummaryType
+}
+
+/** 概况里体检与演练那一行要的东西 */
+export interface GuideSummaryType {
+    /** 上次体检的时间（已排成给人看的写法），没体检过为 '' */
+    checkedText: string
+    /** 本工种缺的依赖名 */
+    missingList: string[]
+    /** 本工种选了以后再配的依赖名 */
+    skippedList: string[]
+    /** 演练：done 走过、declined 选了不用、'' 还没处理 */
+    tour: TourStateType | ''
+}
+
+/** 演练三种情况的说法 */
+const TOUR_TEXT: Record<TourStateType | '', string> = { done: '演练已走过', declined: '演练选了不用', '': '演练还没走' }
+
+/**
+ * 概况里体检与演练那一行：上次体检的时间与缺的、跳过的依赖（按当前工种），演练处理过没有，末尾说怎么重来。
+ * @param guide 体检与演练
+ * @returns 一行
+ */
+export const guideSummaryText = (guide: GuideSummaryType): string => {
+    const missing = guide.missingList.length ? `缺 ${guide.missingList.join('、')}` : ''
+    const skipped = guide.skippedList.length ? `跳过 ${guide.skippedList.join('、')}` : ''
+    const result = [missing, skipped].filter(i => i !== '').join('，') || '本工种用得到的都就绪'
+    const check = guide.checkedText === '' ? '还没体检过' : `上次体检 ${guide.checkedText}，${result}`
+
+    return `体检与演练：${check}；${TOUR_TEXT[guide.tour]}（输入 /xiaoxiaoli tour 可以再走一遍，顺带重新体检）`
 }
 
 /** 一个资料目录的说法：位置与两个文件在不在 */
@@ -214,7 +246,7 @@ const resourceText = (dir: ResourceDirType): string =>
 
 /**
  * project 工具 get 与 /xiaoxiaoli project 的概况：显示名与目录名、TAPD 绑定、用到的系统、两处资料目录与资料文件在不在（不读内容）、
- * 生效工作流、工作台名字与工种。项目内模式说明显示名与 systems 不支持。
+ * 生效工作流、工作台名字与工种，给了体检与演练时末尾再加一行（见 guideSummaryText）。项目内模式说明显示名与 systems 不支持。
  * @param summary 概况所需的一切
  * @returns 多行文字
  */
@@ -233,7 +265,8 @@ export const projectSummaryText = (summary: ProjectSummaryType): string => {
         `通用资料目录：${summary.shared === null ? '取不到用户目录，没有' : resourceText(summary.shared)}`,
         `项目资料目录：${summary.data === null ? '项目内模式没有（流程与资料按项目内文档）' : resourceText(summary.data)}；两处都有的以项目的为准`,
         `工作流：${summary.workflowLabel}`,
-        `工作台：${summary.fullName}；工种：${summary.role.title}${summary.role.isDefault ? '（没设，按前端）' : ''}`
+        `工作台：${summary.fullName}；工种：${summary.role.title}${summary.role.isDefault ? '（没设，按前端）' : ''}`,
+        ...(summary.guide === undefined ? [] : [guideSummaryText(summary.guide)])
     ]
 
     return lineList.join('\n')

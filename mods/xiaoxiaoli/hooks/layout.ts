@@ -1,11 +1,13 @@
 /**
- * @description 面板排版：按显示宽度截断，把首次引导（还没起名时）、标题、迭代筛选、待办（全局模式未绑定时为绑定列表）、进行中任务
- * 排成一行一行的内容，每行带它被点中时的动作；标题按档案里的名字算；沉浸模式下只排标题和进行中任务
+ * @description 面板排版：按显示宽度截断，把首次引导（还没起名时）或演练引导（起了名、还没处理过演练时）、标题、体检缺项、迭代筛选、
+ * 待办（全局模式未绑定时为绑定列表）、进行中任务排成一行一行的内容，每行带它被点中时的动作；标题按档案里的名字算；
+ * 演练的演示条目标「演」；沉浸模式下只排标题和进行中任务
  * @author xiao li
  * @createDate 2026-10-21 17:55
  */
 import type {
     BindStateType,
+    EnvStateType,
     IterationStateType,
     LaunchType,
     ProgressStepType,
@@ -27,6 +29,7 @@ import {
     doingText,
     findStepTask,
     findTask,
+    isDemoTask,
     isModuleDone,
     isSlowStep,
     isTaskDone,
@@ -78,6 +81,13 @@ export interface BoardInputType {
     name?: string
     /** 是否还没起名、要在最上方显示首次引导（沉浸时不显示）；不传为否 */
     isSetupPending?: boolean
+    /**
+     * 是否起了名（或先不设）、还没处理过演练：在首次引导的位置显示「走一遍演练」「不用了」两行；
+     * 和首次引导不同时出，沉浸时、进行中区已有演示条目（演练进行中）时不显示；不传为否
+     */
+    isTourOffered?: boolean
+    /** 上次体检的结果（按当前工种算）：有缺的项时标题行下面多一行；没体检过或不传不显示 */
+    env?: EnvStateType | null
 }
 
 /** 待办一行的排版参数 */
@@ -143,6 +153,15 @@ export const SETUP_GUIDE_TEXT = '第一次用？给工作台起个名字'
 export const SETUP_SKIP_HINT_TEXT = '不设也能照常用'
 export const SETUP_START_TEXT = '[ 开始设置 ]'
 export const SETUP_SKIP_TEXT = '[ 先不设 ]'
+/** 演练引导：起了名（或先不设）、还没处理过演练时排在首次引导的位置，两行各自整行可点 */
+export const ACTION_TOUR_START = 'tour:start'
+export const ACTION_TOUR_SKIP = 'tour:skip'
+export const TOUR_GUIDE_TEXT = '带你模拟走一遍工作流，顺带检查环境'
+export const TOUR_SKIP_HINT_TEXT = '只演练不真改：不建分支、不改 TAPD'
+export const TOUR_START_TEXT = '[ 走一遍演练 ]'
+export const TOUR_SKIP_TEXT = '[ 不用了 ]'
+/** 体检缺项那一行右边的提示（不可点） */
+export const ENV_HINT_TEXT = '/xiaoxiaoli tour 重查'
 export const TODO_PREFIX = 'todo:'
 export const START_PREFIX = 'start:'
 export const ACTION_LAUNCH_COPY = 'launch:copy'
@@ -359,20 +378,21 @@ const statusSeg = (meta: TodoMetaType): SegType => {
 
 /**
  * 左右两头排的一行：右边贴右内边距、优先保住，左边按剩下的宽度截断，中间补空格；宽到连右边都放不下时右边按 fitLine 截断。
- * 标题行、进行中区的标题行与首次引导都这样排。
+ * 标题行、进行中区的标题行、首次引导、演练引导与体检缺项那一行都这样排。
  * @param leftList 左边的段落
  * @param rightList 右边的段落
  * @param width 可用列数
- * @param action 整行点中时的动作
+ * @param action 整行点中时的动作，不传为不可点
  * @returns 一行
  */
-const edgeLine = (leftList: readonly SegType[], rightList: readonly SegType[], width: number, action: string): BoardLineType => {
+const edgeLine = (leftList: readonly SegType[], rightList: readonly SegType[], width: number, action?: string): BoardLineType => {
     const right = fitLine(rightList, width)
     const rightWidth = displayWidth(right.map(i => i.text).join(''))
     const left = fitLine(leftList, Math.max(0, width - rightWidth - 1))
     const gap = width - displayWidth(left.map(i => i.text).join('')) - rightWidth
+    const segList = [...left, { text: ' '.repeat(Math.max(0, gap)) }, ...right]
 
-    return { segList: [...left, { text: ' '.repeat(Math.max(0, gap)) }, ...right], action }
+    return action === undefined ? { segList } : { segList, action }
 }
 
 /**
@@ -400,6 +420,31 @@ const setupGuideLines = (width: number): BoardLineType[] => [
     edgeLine([{ text: SETUP_GUIDE_TEXT, color: NOTICE, bold: true }], [{ text: SETUP_START_TEXT, ...SELECTED_STYLE }], width, ACTION_SETUP_START),
     edgeLine([{ text: SETUP_SKIP_HINT_TEXT, color: META }], [{ text: SETUP_SKIP_TEXT, color: OPTION }], width, ACTION_SETUP_SKIP)
 ]
+
+/**
+ * 演练引导：起了名（或先不设）、还没处理过演练时排在首次引导的位置，写法同首次引导：
+ * 第一行说明加「[ 走一遍演练 ]」（点它让 AI 带着走），第二行「只演练不真改」加「[ 不用了 ]」（点它记进档案，不再显示）。
+ * @param width 可用列数
+ * @returns 两行
+ */
+const tourGuideLines = (width: number): BoardLineType[] => [
+    edgeLine([{ text: TOUR_GUIDE_TEXT, color: NOTICE, bold: true }], [{ text: TOUR_START_TEXT, ...SELECTED_STYLE }], width, ACTION_TOUR_START),
+    edgeLine([{ text: TOUR_SKIP_HINT_TEXT, color: META }], [{ text: TOUR_SKIP_TEXT, color: OPTION }], width, ACTION_TOUR_SKIP)
+]
+
+/**
+ * 体检缺项：上次体检有缺的项（按当前工种算）时排在标题行下面一行，左边「环境：缺 n 项（依赖名）」，右边提示重查的命令；不可点。
+ * 没体检过、没有缺的不排。
+ * @param env 上次体检的结果
+ * @param width 可用列数
+ * @returns 零或一行
+ */
+const envLines = (env: EnvStateType | null | undefined, width: number): BoardLineType[] => {
+    if (env === null || env === undefined || !env.missingList.length) return []
+
+    const left: SegType = { text: `环境：缺 ${env.missingList.length} 项（${env.missingList.join('、')}）`, color: NOTICE }
+    return [edgeLine([left], [{ text: ENV_HINT_TEXT, color: META }], width)]
+}
 
 /** 标题下的分隔线：ASCII - 铺满可用宽度 */
 const separatorLine = (width: number): BoardLineType => ({ segList: [{ text: '-'.repeat(width), color: SEPARATOR }] })
@@ -650,12 +695,23 @@ const doneSegs = (text: string, mark = '【已完成】'): SegType[] => [
     { text: mark, color: META }
 ]
 
+/** 演练的演示条目在类型标的位置标「演」，不显示 ID（标题里已有「【演练】」） */
+const DEMO_MARK: SegType = { text: '演', color: NOTICE, bold: true }
+
+/**
+ * 条目一行开头的类型标与 ID：一般为「需 1046775 」；演练的演示条目为「演 」，一眼看得出是演示。
+ * @param task 条目
+ * @returns 开头的段落
+ */
+const taskLead = (task: ProgressTaskType): SegType[] =>
+    isDemoTask(task) ? [DEMO_MARK, { text: ' ' }] : [KIND_MARK[task.kind], { text: ` ${task.id} `, ...ID_STYLE }]
+
 /** 需求的标题行：ID、标题、分支，等用户时跟醒目的等待标记 */
 const taskHead = (task: ProgressTaskType, width: number): BoardLineType => {
     const branch: SegType[] = task.branch ? [{ text: ` · ${task.branch}`, color: META }] : []
     const waiting: SegType[] = task.waiting ? [{ text: `  ${WAITING_TEXT[task.waiting]}`, color: NOTICE, bold: true }] : []
 
-    return { segList: fitLine([KIND_MARK[task.kind], { text: ` ${task.id} `, ...ID_STYLE }, { text: task.title, bold: true }, ...branch, ...waiting], width) }
+    return { segList: fitLine([...taskLead(task), { text: task.title, bold: true }, ...branch, ...waiting], width) }
 }
 
 /** 树状展开的一行：前缀是缩进与连接符，后面是这一项的段落 */
@@ -733,13 +789,13 @@ const foldedLine = (task: ProgressTaskType, width: number): BoardLineType => {
     const waiting: SegType[] = task.waiting ? [{ text: `  ${WAITING_TEXT[task.waiting]}`, color: NOTICE, bold: true }] : []
 
     return {
-        segList: fitLine([KIND_MARK[task.kind], { text: ` ${task.id} `, ...ID_STYLE }, { text: task.title }, { text: where, color: META }, ...confirm, ...waiting], width)
+        segList: fitLine([...taskLead(task), { text: task.title }, { text: where, color: META }, ...confirm, ...waiting], width)
     }
 }
 
 /** 做完的需求折成一行，灰色划掉 */
 const doneTaskLine = (task: ProgressTaskType, width: number): BoardLineType => ({
-    segList: fitLine([KIND_MARK[task.kind], { text: ` ${task.id} `, ...ID_STYLE }, ...doneSegs(task.title)], width)
+    segList: fitLine([...taskLead(task), ...doneSegs(task.title)], width)
 })
 
 /**
@@ -802,10 +858,25 @@ const focusBoard = (header: BoardLineType, progressLines: readonly BoardLineType
     withPadding([header, separatorLine(width), BLANK_LINE, ...progressLines])
 
 /**
- * 把面板排成一行一行：顶部空行、首次引导（还没起名时两行加一行空行）、标题（含刷新）、分隔线、空行、切换、迭代筛选（仅本项目）、
- * 待办区、启动命令、进行中区；没有 TAPD 配置时：全局模式待办区换成绑定列表，项目内模式换成一行提示；记着不用 TAPD 的项目（全局模式
+ * 引导位置排什么：还没起名时排首次引导；起了名（或先不设）、还没处理过演练、进行中区也没有演示条目时排演练引导；
+ * 两者不同时出，各两行加一行空行。沉浸时调用方不排。
+ * @param input 排版所需的全部状态
+ * @param width 可用列数
+ * @returns 引导的行，没有为空
+ */
+const guideLines = (input: BoardInputType, width: number): BoardLineType[] => {
+    if (input.isSetupPending) return [...setupGuideLines(width), BLANK_LINE]
+    if (input.isTourOffered && !input.progress.taskList.some(isDemoTask)) return [...tourGuideLines(width), BLANK_LINE]
+
+    return []
+}
+
+/**
+ * 把面板排成一行一行：顶部空行、引导（还没起名时为首次引导，起了名还没处理过演练时为演练引导，各两行加一行空行）、
+ * 标题（含刷新）、体检缺项（有缺的项时一行）、分隔线、空行、切换、迭代筛选（仅本项目）、待办区、启动命令、进行中区；
+ * 没有 TAPD 配置时：全局模式待办区换成绑定列表，项目内模式换成一行提示；记着不用 TAPD 的项目（全局模式
  * systems.tapd 为 false）待办区换成两行说明，不列 TAPD 项目；进行中区照常读本项目的状态文件。
- * 沉浸时只排标题、分隔线、空行与进行中区，首次引导、切换、迭代、待办（或绑定列表、没配提示）、启动命令都不排。
+ * 沉浸时只排标题、分隔线、空行与进行中区，引导、体检缺项、切换、迭代、待办（或绑定列表、没配提示）、启动命令都不排。
  * 标题按档案里的名字算；标题行的项目名设了显示名就用它。左右各留 1 列内边距，内容按总宽减 2 排。
  * @param input 排版所需的全部状态
  * @param columns 面板列数
@@ -819,8 +890,10 @@ export const buildBoard = (input: BoardInputType, columns: number): BoardLineTyp
     const isMainCheckout = input.workplace?.isMainCheckout ?? true
     const progressLines = progressSection({ progress: input.progress, sessionId, isMainCheckout, isFocus: input.isFocus, width })
     const launch = input.launch === null ? [] : [BLANK_LINE, ...launchLines(input.launch, width)]
-    /* 沉浸时不排引导，免得挡住进行中的任务；起名入口还有 /xiaoxiaoli setup 与会话启动时的提示 */
-    const guide = input.isSetupPending ? [...setupGuideLines(width), BLANK_LINE] : []
+    /* 沉浸时不排引导，免得挡住进行中的任务；起名与演练入口还有 /xiaoxiaoli setup、/xiaoxiaoli tour 与会话启动时的提示 */
+    const guide = guideLines(input, width)
+    /* 体检缺项跟在标题行下面，不占进行中区的位置；沉浸时不排 */
+    const env = envLines(input.env, width)
     const noticeLines = (textList: readonly string[]) => textList.map(text => ({ segList: fitLine([{ text, color: NOTICE }], width) }))
     /* 项目设了显示名就用它；没设时没绑定的用目录名、绑定了的用 TAPD 项目名（照旧） */
     const displayName = input.workplace?.displayName ?? ''
@@ -830,7 +903,7 @@ export const buildBoard = (input: BoardInputType, columns: number): BoardLineTyp
         const header = headerLine({ title, name, showStatus: false, meta, width, noCurrent: false })
         if (input.isFocus) return focusBoard(header, progressLines, width)
 
-        return withPadding([...guide, header, separatorLine(width), BLANK_LINE, ...noticeLines(TAPD_OFF_LINES), BLANK_LINE, ...progressLines])
+        return withPadding([...guide, header, ...env, separatorLine(width), BLANK_LINE, ...noticeLines(TAPD_OFF_LINES), BLANK_LINE, ...progressLines])
     }
     if (input.config === null) {
         const name = displayName || (input.workplace?.name ?? '')
@@ -841,7 +914,7 @@ export const buildBoard = (input: BoardInputType, columns: number): BoardLineTyp
         /* 项目里没有 config.json、只因取不到用户目录落不了全局：如实说明，不说「没配 TAPD」 */
         const noticeList: readonly string[] = input.workplace?.isGlobalRootMissing ? NO_GLOBAL_ROOT_LINES : [NO_CONFIG_TEXT]
         const body = isBinding ? bindSection(input.binding, meta, width) : noticeLines(noticeList)
-        return withPadding([...guide, header, separatorLine(width), BLANK_LINE, ...body, BLANK_LINE, ...progressLines])
+        return withPadding([...guide, header, ...env, separatorLine(width), BLANK_LINE, ...body, BLANK_LINE, ...progressLines])
     }
 
     const iteration = input.iteration
@@ -854,6 +927,7 @@ export const buildBoard = (input: BoardInputType, columns: number): BoardLineTyp
     return withPadding([
         ...guide,
         header,
+        ...env,
         separatorLine(width),
         BLANK_LINE,
         scopeLine(meta, width),

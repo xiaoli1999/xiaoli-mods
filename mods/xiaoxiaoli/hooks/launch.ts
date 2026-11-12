@@ -8,7 +8,7 @@
  */
 import type { LaunchShell, ProgressKind, ProgressTaskType } from '../types'
 import { DEFAULT_NAME, fullNameOf } from './profile'
-import { findTask, isTaskDone, ownsTask } from './workbench'
+import { findTask, isDemoTask, isTaskDone, ownsTask } from './workbench'
 
 /** 开工走哪条路：本会话发出、本会话排队发出、新会话命令、回到已有会话的命令 */
 export type StartRouteType = 'submit' | 'queue' | 'new' | 'resume'
@@ -159,6 +159,7 @@ export const isShortId = (text: string): boolean => SHORT_ID_PATTERN.test(text)
 /**
  * 开工分流：这条需求本就归当前会话，空闲发出、忙时排队；归别的会话且没做完，给回到那个会话的命令；
  * 否则当前会话空闲且手上没有没做完的需求才在本会话开工，其余一律给新会话命令。条目按短 ID 与 TAPD 项目 ID 对应（见 findTask）。
+ * 演练的演示条目不算「手上有活」：演练中途点真实待办开工，照常在本会话发出。
  * @param context 分流要看的情况
  * @returns 走哪条路
  */
@@ -167,7 +168,7 @@ export const routeStart = ({ taskList, id, workspaceId, sessionId, isMainCheckou
     if (task !== undefined && ownsTask(task, sessionId, isMainCheckout)) return isBusy ? 'queue' : 'submit'
     if (task !== undefined && task.sessionId !== undefined && !isTaskDone(task)) return 'resume'
 
-    const isHolding = taskList.some(i => !isTaskDone(i) && ownsTask(i, sessionId, isMainCheckout))
+    const isHolding = taskList.some(i => !isDemoTask(i) && !isTaskDone(i) && ownsTask(i, sessionId, isMainCheckout))
     return isBusy || isHolding ? 'new' : 'submit'
 }
 

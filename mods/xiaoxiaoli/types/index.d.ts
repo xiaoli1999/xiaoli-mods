@@ -1,6 +1,6 @@
 /**
  * @description 小小黎的状态契约：$.state 中每个值的类型，以及配置（含项目差异：显示名与用到的系统）、待办、进行中任务、开工命令、
- * 全局档案（起名与工种）与工作流的形状
+ * 全局档案（起名、工种与演练）、工作流、体检依赖清单与演练脚本的形状
  * @author xiao li
  * @createDate 2026-10-21 17:40
  */
@@ -348,6 +348,62 @@ export interface ProfileType {
     isGuided: boolean
     /** 工种（文件里的 role），没设或读不懂为 ''，这时按前端 */
     role: WorkRole | ''
+    /** 演练处理过没有（文件里的 tour）：没处理过不写，这时起了名（或先不设）的面板上出「走一遍演练」两行 */
+    tour?: TourStateType
+}
+
+/** 演练的处理结果：done 走过（含中途叫停），declined 在面板上选了「不用了」 */
+export type TourStateType = 'done' | 'declined'
+
+/** 依赖的种类：MCP 服务器、skill、命令行工具 */
+export type DepKindType = 'mcp' | 'skill' | 'cli'
+
+/** guide/deps.json 里的一项依赖：体检时 AI 按 detect 检查，缺了按 install 装 */
+export interface DepType {
+    /** 依赖 id，check 结果的键，如 tapd、li-yuque-skills */
+    id: string
+    kind: DepKindType
+    /** 给人看的名字，如「受控浏览器」 */
+    title: string
+    /** 做什么用 */
+    use: string
+    /** 怎么判断有没有装 */
+    detect: string
+    /** 安装方式，没写为没有 */
+    install?: string
+    /** 要什么账号或令牌，没写为不需要 */
+    account?: string
+    /** 哪些工种用得到；文件里没写为全部工种 */
+    roles: WorkRole[]
+}
+
+/** guide/tour.json：演练脚本 */
+export interface TourType {
+    /** 总规则 */
+    rules: string[]
+    /** 第一部分体检怎么做 */
+    check: string[]
+    /** 每个环节演练时验证什么：键为「<工作流 id>:<步骤键>」或「<步骤键>」 */
+    steps: Record<string, string>
+    /** 两种键都没有的环节用它 */
+    fallback: string
+    /** 第三部分功能点 */
+    features: string[]
+    /** 收尾 */
+    finish: string[]
+}
+
+/** 一项依赖的体检结果：有、缺、用户选了以后再配 */
+export type CheckResultType = 'ok' | 'missing' | 'skipped'
+
+/** $.state 里的体检结果：只算当前工种用得到的依赖，面板与概况用 */
+export interface EnvStateType {
+    /** 上次体检的时间（ISO），全局根目录下 env.json 里记的 */
+    checkedAt: string
+    /** 缺的依赖名 */
+    missingList: string[]
+    /** 选了以后再配的依赖名 */
+    skippedList: string[]
 }
 
 /** $.state 里的档案：读出来的内容加文件位置 */
@@ -404,6 +460,8 @@ declare module 'claude-code' {
             startSource: string
             /** 当前项目生效的工作流；还没定下为 null */
             workflow: ActiveWorkflowType | null
+            /** 上次体检的结果（按当前工种算）；没体检过或取不到全局根目录为 null */
+            env: EnvStateType | null
         }
     }
 }

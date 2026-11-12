@@ -95,7 +95,7 @@
             "title": "浏览器自测",
             "slow": true,
             "what": "受控浏览器登录测试账号走需求流程",
-            "tools": "chrome-devtools MCP、li-debug-with-chrome",
+            "tools": "chrome-devtools MCP",
             "output": "自测结论与截图",
             "ask": "写操作前问",
             "rules": [
@@ -168,7 +168,7 @@
             "slow": false,
             "what": "本地、测试环境同账号、同数据各试一轮",
             "ask": "发【请补信息】前问",
-            "rules": ["先用 li-debug-with-chrome 复现；一轮复现不了就在条目上发【请补信息】（先问）"]
+            "rules": ["先在受控浏览器里按原步骤复现；一轮复现不了就在条目上发【请补信息】（先问）"]
         },
         {
             "key": "diagnose",

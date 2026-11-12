@@ -6,7 +6,8 @@
  * 0.5.0 的起名与首次引导（名字规则、profile.json 容错、引导行与两个按钮、setup 工具与 name 命令、署名、改名后的标题与前缀），
  * 0.5.1 的首次使用自动发起设置引导（只发一次的标记、不打扰的条件、热重载与多会话），
  * 0.6.0 的工种与工作流（内置定义校验、三层查找与降级、按工作流建条目、不建分支的开工、workflow 工具、role 命令），
- * 0.7.0 的通用配置与项目差异（通用资料目录、displayName、systems、不用 TAPD、project 工具与命令）
+ * 0.7.0 的通用配置与项目差异（通用资料目录、displayName、systems、不用 TAPD、project 工具与命令），
+ * 0.8.0 的体检与演练（两份文件的宽松读取、按工种筛依赖、演练文字与工作流配对、演练脚本、演示条目、guide 工具、三个入口、体检缺项）
  * @author xiao li
  * @createDate 2026-10-21 18:20
  */
@@ -27,6 +28,7 @@ import type {
     WorkplaceType
 } from '../types'
 import { BUILTIN_WORKFLOW_TEXTS } from './fixtures/workflows'
+import { GUIDE_TEXTS } from './fixtures/guide'
 import { actionAt } from '../hooks/board'
 import type { BoardPropsType } from '../hooks/board'
 import {
@@ -37,6 +39,8 @@ import {
     ACTION_SCOPE,
     ACTION_SETUP_SKIP,
     ACTION_SETUP_START,
+    ACTION_TOUR_SKIP,
+    ACTION_TOUR_START,
     BIND_HINT_TEXT,
     BOARD_TITLE,
     BOARD_TITLE_SPACED,
@@ -51,7 +55,13 @@ import {
     SETUP_SKIP_HINT_TEXT,
     SETUP_SKIP_TEXT,
     SETUP_START_TEXT,
+    ENV_HINT_TEXT,
+    TOUR_GUIDE_TEXT,
+    TOUR_SKIP_HINT_TEXT,
+    TOUR_SKIP_TEXT,
+    TOUR_START_TEXT,
     buildBoard,
+    clockText,
     displayWidth,
     fitWidth,
     spacedTitleOf,
@@ -70,6 +80,8 @@ import {
     fullNameOf,
     guidedByOf,
     isSetupPending,
+    isTourOffered,
+    isTourPending,
     nameOf,
     normalizeName,
     noticeText,
@@ -77,7 +89,8 @@ import {
     profileText,
     roleOf,
     setupPrompt,
-    toRole
+    toRole,
+    tourPrompt
 } from '../hooks/profile'
 import type { BoardInputType, BoardLineType } from '../hooks/layout'
 import {
@@ -127,6 +140,7 @@ import {
     SLOW_STEP_KEYS,
     STORY_STEPS,
     applyProgress,
+    findStepTask,
     findTask,
     isSlowStep,
     legacySteps,
@@ -158,12 +172,29 @@ import {
 import {
     SHARED_README_TEXT,
     checkDisplayName,
+    guideSummaryText,
     parseProjectExtras,
     projectConfigText,
     projectSummaryText,
     systemsText,
     toProjectChange
 } from '../hooks/project'
+import {
+    DEMO_TITLE,
+    checkReplyText,
+    depsOfRole,
+    envStateOf,
+    envText,
+    newDemoTask,
+    parseDeps,
+    parseEnv,
+    parseTour,
+    stepGuideOf,
+    toCheckResults,
+    toGuideInput,
+    tourScript,
+    tourStepsOf
+} from '../hooks/guide'
 
 /* 以下全部是造的数据，不含任何真实 TAPD 内容 */
 const WS = '90000001'
@@ -415,10 +446,15 @@ interface WorldType {
     onWrite?: (path: string, files: Record<string, string>) => void
     /** 改写某个内置工作流 workflows/<工种>.json 的内容，null 为读不到；没写的照常用逐字副本 */
     builtins?: Record<string, string | null>
+    /** 改写 guide/deps.json、guide/tour.json 的内容，null 为读不到；没写的照常用逐字副本 */
+    guides?: { deps?: string | null; tour?: string | null }
 }
 
-/** 已经选过「先不设」的档案：boot 的默认世界 */
-const SKIPPED_PROFILE = JSON.stringify({ version: 1, skipped: true })
+/**
+ * 已经选过「先不设」的档案：boot 的默认世界。0.8.0 起同时记着演练已走过（tour: done），
+ * 免得之前的用例都多出演练引导两行、行号整体下移；要看演练引导的用例自己给档案
+ */
+const SKIPPED_PROFILE = JSON.stringify({ version: 1, skipped: true, tour: 'done' })
 
 /** 真的开一个会话：小小黎碰到的外部名词都接住，并记下它做了什么 */
 const boot = async ($: Engine, on: On, world: WorldType = {}) => {
@@ -508,6 +544,12 @@ const boot = async ($: Engine, on: On, world: WorldType = {}) => {
         seen.reads.push(path)
         const builtin = /\/xiaoxiaoli\/workflows\/([a-z]+)\.json$/.exec(path)?.[1]
         const builtinText = builtin === undefined ? undefined : builtin in (world.builtins ?? {}) ? world.builtins?.[builtin] : BUILTIN_WORKFLOW_TEXTS[builtin as WorkRole]
+        /* 0.8.0：mod 目录下的 guide/deps.json 与 guide/tour.json 也单独给，默认用逐字副本 */
+        const guide = /\/xiaoxiaoli\/guide\/(deps|tour)\.json$/.exec(path)?.[1] as 'deps' | 'tour' | undefined
+        if (guide !== undefined) {
+            const guideText = guide in (world.guides ?? {}) ? world.guides?.[guide] : GUIDE_TEXTS[guide]
+            return guideText === null || guideText === undefined ? { deny: 'ENOENT' } : { value: guideText }
+        }
         const text = path.endsWith('/xiaoxiaoli/config.json') ? world.modConfig : builtin === undefined ? files[path] : (builtinText ?? undefined)
         return text === undefined ? { deny: 'ENOENT' } : { value: text }
     })
@@ -1216,8 +1258,8 @@ describe('进度工具 mcp__xiaoxiaoli__progress', () => {
     test('会话启动时注册；主会话的原参数（release done、note、waiting none、bindSession）在旧结构上写入成功并迁成 v2', async ($, on) => {
         const files = { [CONFIG_FILE]: JSON.stringify(CONFIG), [STATE_FILE]: legacyState() }
         const { seen } = await boot($, on, { files })
-        /* 0.5.0 起多注册一个起名工具 setup，0.6.0 起再多一个工作流工具 workflow，0.7.0 起再多一个项目工具 project */
-        expect(seen.tools).toEqual(['progress', 'bind', 'setup', 'workflow', 'project'])
+        /* 0.5.0 起多注册一个起名工具 setup，0.6.0 起再多一个工作流工具 workflow，0.7.0 起再多一个项目工具 project，0.8.0 起再多一个演练工具 guide */
+        expect(seen.tools).toEqual(['progress', 'bind', 'setup', 'workflow', 'project', 'guide'])
         const result = await callProgress($, {
             id: '1046775',
             title: '商家端-设计器模块',
@@ -1867,8 +1909,8 @@ describe('全局模式：绑定与解绑', () => {
     test('AI 绑定 mcp__xiaoxiaoli__bind：对不上、对上多个、参数不对都回原因并注明没有写入；按名字绑定后面板拉待办', async ($, on) => {
         const global = globalFilesOf(FG_ROOT)
         const { clock, seen, files } = await boot($, on, { cwd: FG_ROOT, files: {} })
-        /* 0.5.0 起多注册一个起名工具 setup，0.6.0 起再多一个工作流工具 workflow，0.7.0 起再多一个项目工具 project */
-        expect(seen.tools).toEqual(['progress', 'bind', 'setup', 'workflow', 'project'])
+        /* 0.5.0 起多注册一个起名工具 setup，0.6.0 起再多一个工作流工具 workflow，0.7.0 起再多一个项目工具 project，0.8.0 起再多一个演练工具 guide */
+        expect(seen.tools).toEqual(['progress', 'bind', 'setup', 'workflow', 'project', 'guide'])
         expect((await callBind($, { project: '演示' })).deny).toBe(
             `小小黎：「演示」对上了 2 个项目：演示项目（${WS}）、演示项目二（${WS2}），请给全名或项目 ID，没有写入`
         )
@@ -2788,8 +2830,8 @@ describe('0.5.0：起名与首次引导', () => {
     test('已经设置过（含先不设）：不弹提示、没有引导行，起名工具放在 ToolSearch 后面', async ($, on) => {
         const { clock, seen } = await boot($, on)
         expect(seen.toasts.some(i => i.includes('第一次用'))).toBe(false)
-        /* 0.7.0 起项目工具 project 也放在 ToolSearch 后面 */
-        expect(seen.deferredTools).toEqual(['bind', 'setup', 'project'])
+        /* 0.7.0 起项目工具 project 也放在 ToolSearch 后面；0.8.0 起演练处理过（默认档案记着 tour: done）时演练工具 guide 也在后面 */
+        expect(seen.deferredTools).toEqual(['bind', 'setup', 'project', 'guide'])
         await clock.advance(1)
         const ui = await mountPane($)
         expect(await rowOf(ui, ACTION_SETUP_START)).toBe(-1)
@@ -2806,7 +2848,9 @@ describe('0.5.0：起名与首次引导', () => {
         expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual({ version: 1, skipped: true })
         expect(seen.toasts.at(-1)).toBe('小小黎：好的，先不设，名字用默认的；以后想起名用 /xiaoxiaoli setup，或 /xiaoxiaoli name <名字>')
         expect(await rowOf(ui, ACTION_SETUP_START)).toBe(-1)
-        expect((await linesOf(ui))[HEADER_ROW]?.action).toBe(ACTION_REFRESH)
+        /* 0.8.0 起先不设之后、演练还没处理过，引导位置换成演练引导两行，标题行跟着下移 */
+        expect((await linesOf(ui))[HEADER_ROW]?.action).toBe(ACTION_TOUR_START)
+        expect((await linesOf(ui))[HEADER_ROW + GUIDE_ROWS]?.action).toBe(ACTION_REFRESH)
         await ui.post({ type: 'row', action: ACTION_SETUP_SKIP }, { in: 'board' })
         await ui.post({ type: 'row', action: ACTION_SETUP_START }, { in: 'board' })
         expect(seen.written).toEqual([PROFILE_PATH])
@@ -2820,15 +2864,17 @@ describe('0.5.0：起名与首次引导', () => {
         const ui = await mountPane($)
         await click(ui, 5, await rowOf(ui, ACTION_SETUP_START))
         const text = seen.submitted[0]?.text ?? ''
-        expect(seen.submitted).toEqual([{ text: setupPrompt({ name: '', isUnbound: false, projectName: 'demo' }), asUser: true }])
-        /* 0.5.1 起末尾多一条「不想现在设就不追问」 */
-        expect(text.split('\n')).toHaveLength(5)
+        /* 0.8.0 起演练还没处理过时，保存之后多一条问要不要走演练 */
+        expect(seen.submitted).toEqual([{ text: setupPrompt({ name: '', isUnbound: false, projectName: 'demo', isTourOffered: true }), asUser: true }])
+        /* 0.5.1 起末尾多一条「不想现在设就不追问」，0.8.0 起再多一条演练 */
+        expect(text.split('\n')).toHaveLength(6)
         expect(text.startsWith('设置工作台（来自工作台面板的「开始设置」或 /xiaoxiaoli setup），按下面做：')).toBe(true)
         expect(text).toContain('用 AskUserQuestion 工具问我「工作台叫什么名字？」，说明最终名称是「名字+AI工作台」')
         expect(text).toContain('选项里给「保持默认：小小黎」，我也可以选「其他」自己填')
         expect(text).toContain('3. 拿到名字和工种后调 mcp__xiaoxiaoli__setup 保存')
         expect(text).toContain('用一两句话告诉我结果，不要做别的事')
-        expect(text).toContain('4. 我不想现在设（关掉提问、按了取消或说以后再说）时不要追问，也不要调 mcp__xiaoxiaoli__setup')
+        /* 0.8.0 起第 4 条是演练，「不想现在设」挪到第 5 条 */
+        expect(text).toContain('5. 我不想现在设（关掉提问、按了取消或说以后再说）时不要追问，也不要调 mcp__xiaoxiaoli__setup')
         expect(text).toContain('只告诉我以后想起名可以点工作台面板上的「开始设置」或输入 /xiaoxiaoli setup')
         expect(text).not.toContain('mcp__xiaoxiaoli__bind')
         expect(seen.toasts.at(-1)).toBe('小小黎：已发出：设置工作台')
@@ -2850,12 +2896,14 @@ describe('0.5.0：起名与首次引导', () => {
         expect(seen.submitted).toEqual([])
         await clock.advance(1)
         const text = seen.submitted[0]?.text ?? ''
-        expect(seen.submitted).toEqual([{ text: setupPrompt({ name: '', isUnbound: true, projectName: 'fg-demo' }), asUser: true }])
-        expect(text.split('\n')).toHaveLength(6)
+        /* 0.8.0 起演练还没处理过时，保存之后多一条问要不要走演练 */
+        expect(seen.submitted).toEqual([{ text: setupPrompt({ name: '', isUnbound: true, projectName: 'fg-demo', isTourOffered: true }), asUser: true }])
+        expect(text.split('\n')).toHaveLength(7)
         expect(text).toContain('3. 再用 AskUserQuestion 问我这个项目（fg-demo）对应哪个 TAPD 项目，选项里给「先不绑」')
         expect(text).toContain('我选了某个项目就调 mcp__xiaoxiaoli__bind 绑定，选「先不绑」就跳过')
         expect(text).toContain('4. 拿到名字和工种后调 mcp__xiaoxiaoli__setup 保存')
-        expect(text).toContain('5. 我不想现在设')
+        /* 0.8.0 起第 5 条是演练，「不想现在设」挪到第 6 条 */
+        expect(text).toContain('6. 我不想现在设')
         expect(seen.written).toEqual([])
     })
 
@@ -2892,7 +2940,9 @@ describe('0.5.0：起名与首次引导', () => {
         expect(seen.titles).toEqual([BOARD_TITLE, '小美AI工作台'])
         expect(seen.statuses.at(-1)).toBe(`小美${LEGACY_STATUS}`)
         expect(await rowOf(ui, ACTION_SETUP_START)).toBe(-1)
-        expect((await textsOf(ui))[HEADER_ROW]?.startsWith('小 美 A I 工 作 台 · 演示项目')).toBe(true)
+        /* 0.8.0 起起了名、演练还没处理过，引导位置换成演练引导两行，标题行跟着下移 */
+        expect(await rowOf(ui, ACTION_TOUR_START)).toBe(HEADER_ROW)
+        expect((await textsOf(ui))[HEADER_ROW + GUIDE_ROWS]?.startsWith('小 美 A I 工 作 台 · 演示项目')).toBe(true)
         expect((await runCommand($, 'refresh')).text).toBe('小美：已刷新，待办 3 条')
         expect((await callProgress($, { id: '1046775', status: 'done' })).deny).toBe('小美：参数不对，给了 status 就要给 step，没有写入')
         await ui.unmount()
@@ -2976,7 +3026,8 @@ describe('0.5.0：起名与首次引导', () => {
         const { clock, seen } = await boot($, on, { files, profile: namedProfile('小美') })
         await clock.advance(1)
         const ui = await mountPane($)
-        expect((await textsOf(ui))[HEADER_ROW]?.startsWith('小 美 A I 工 作 台 · 演示项目 ')).toBe(true)
+        /* 0.8.0 起起了名、演练还没处理过的档案多出演练引导两行，标题行跟着下移 */
+        expect((await textsOf(ui))[HEADER_ROW + GUIDE_ROWS]?.startsWith('小 美 A I 工 作 台 · 演示项目 ')).toBe(true)
         expect(await rowOf(ui, `todo:${STORY_A}`)).toBeGreaterThan(0)
         expect(seen.statuses.at(-1)).toBe(`小美${LEGACY_STATUS}`)
         expect((await runCommand($, 'unbind')).text).toBe(`小美：本项目用项目内配置 ${CONFIG_FILE}，unbind 只清全局绑定，项目内配置没动`)
@@ -3065,7 +3116,8 @@ describe('0.5.1：首次使用自动发起设置引导', () => {
         await clock.advance(1)
         expect(seen.written).toEqual([PROFILE_PATH])
         expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual(MARK)
-        expect(seen.submitted).toEqual([{ text: setupPrompt({ name: '', isUnbound: false, projectName: 'demo', isAuto: true }), asUser: true }])
+        /* 0.8.0 起演练还没处理过时，自动发起的那段话里也多一条演练 */
+        expect(seen.submitted).toEqual([{ text: setupPrompt({ name: '', isUnbound: false, projectName: 'demo', isAuto: true, isTourOffered: true }), asUser: true }])
         expect(firstUseToasts(seen.toasts)).toEqual([AUTO])
         const ui = await mountPane($)
         expect((await linesOf(ui)).slice(1, 3).map(i => i.action)).toEqual([ACTION_SETUP_START, ACTION_SETUP_SKIP])
@@ -3078,7 +3130,8 @@ describe('0.5.1：首次使用自动发起设置引导', () => {
     test('全局模式没绑定 TAPD 的项目自动发起：那段话里带上问 TAPD 项目的一条', async ($, on) => {
         const { clock, seen } = await boot($, on, { cwd: FG_ROOT, files: {}, profile: null })
         await clock.advance(DELAY)
-        expect(seen.submitted).toEqual([{ text: setupPrompt({ name: '', isUnbound: true, projectName: 'fg-demo', isAuto: true }), asUser: true }])
+        /* 0.8.0 起演练还没处理过时，自动发起的那段话里也多一条演练 */
+        expect(seen.submitted).toEqual([{ text: setupPrompt({ name: '', isUnbound: true, projectName: 'fg-demo', isAuto: true, isTourOffered: true }), asUser: true }])
     })
 
     test('已有标记（这台机器自动发起过、仍没设置）：不再自动发，启动时直接弹普通提示，不写文件', async ($, on) => {
@@ -3693,7 +3746,8 @@ describe('0.6.0：工种与工作流', () => {
         expect((await runCommand($, 'role backend')).text).toBe(
             `小小黎：已改，工种：后端，从下一条新开工的条目起按内置 · 后端的工作流，进行中的条目不受影响（写入 ${PROFILE_PATH}）`
         )
-        expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual({ version: 1, skipped: true, role: 'backend' })
+        /* 0.8.0 起默认档案还记着 tour: done，只改工种时原样保留 */
+        expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual({ version: 1, skipped: true, tour: 'done', role: 'backend' })
         expect((await runCommand($, 'nonsense')).text).toContain(' · role <工种> 设工种（前端、后端、Python、测试、产品、其他）')
         await callWorkflow($, { action: 'set', scope: 'project', definition: MINI })
         expect((await runCommand($, 'role 产品')).text).toContain('工种：产品（本项目生效的仍是项目自定义工作流，它优先于内置）')
@@ -3912,7 +3966,9 @@ describe('0.7.0：通用配置与项目差异', () => {
             `通用资料目录：${SHARED}（resources.md 有，secrets.env 没有）`,
             `项目资料目录：${global.dir}（resources.md 没有，secrets.env 有）；两处都有的以项目的为准`,
             '工作流：内置 · 前端',
-            '工作台：小小黎AI工作台；工种：前端（没设，按前端）'
+            '工作台：小小黎AI工作台；工种：前端（没设，按前端）',
+            /* 0.8.0 起概况末尾多一行体检与演练（默认档案记着演练已走过，这里没有 env.json） */
+            '体检与演练：还没体检过；演练已走过（输入 /xiaoxiaoli tour 可以再走一遍，顺带重新体检）'
         ].join('\n')
         expect(String((await callProject($, { action: 'get' })).result)).toBe(expected)
         expect((await runCommand($, 'project')).text).toBe(`小小黎：本项目概况\n${expected}`)
@@ -4010,5 +4066,514 @@ describe('0.7.0：通用配置与项目差异', () => {
         expect(seen.copied[0]).toContain(`--add-dir '${global.dir}' --add-dir '${SHARED}'`)
         expect(seen.reads.filter(i => i.endsWith('resources.md'))).toEqual([])
         await ui.unmount()
+    })
+})
+
+describe('0.8.0：体检与演练', () => {
+    const PROFILE_PATH = `${GLOBAL_ROOT}/profile.json`
+    const ENV_PATH = `${GLOBAL_ROOT}/env.json`
+    /** 引导两行加一行空行 */
+    const GUIDE_ROWS = 3
+    /** 主会话调一次演练工具（新工具不在生成的工具名清单里，按宽松的入参调） */
+    const callGuide = ($: Engine, args: Record<string, unknown>) => $.tool.call({ tool: 'mcp__xiaoxiaoli__guide', ...args } as unknown as ToolCallArgs)
+    /** 逐字副本读出来的依赖清单与演练脚本 */
+    const depsOf = () => {
+        const parsed = parseDeps(GUIDE_TEXTS.deps)
+        if (!('depList' in parsed)) throw new Error(parsed.reason)
+        return parsed.depList
+    }
+    const tourOf = () => {
+        const parsed = parseTour(GUIDE_TEXTS.tour)
+        if (!('tour' in parsed)) throw new Error(parsed.reason)
+        return parsed.tour
+    }
+    /** 内置工作流的定义 */
+    const builtinOf = (role: WorkRole) => {
+        const parsed = parseWorkflow(BUILTIN_WORKFLOW_TEXTS[role])
+        if (!('workflow' in parsed)) throw new Error(role)
+        return parsed.workflow
+    }
+    /** 起了名、没有演练记录的档案（老用户） */
+    const NAMED = JSON.stringify({ version: 1, name: '小美' })
+    const NOW_ISO = new Date(NOW).toISOString()
+    /** 先 clock.advance(1) 再写的时间 */
+    const AFTER_ISO = new Date(NOW + 1).toISOString()
+
+    test('两份文件的读取：逐字副本都能用；读不到、不是 JSON、不是对象、版本更新或不对、缺 items 都给原因；格式不对的项与重复 id 跳过，roles 没写为全部工种', () => {
+        const depList = depsOf()
+        expect(depList.map(i => i.id)).toEqual(['tapd', 'li-yuque-skills', 'chrome-devtools', 'figma', 'context7', 'git', 'node'])
+        expect(depList[0]).toEqual({
+            id: 'tapd',
+            kind: 'mcp',
+            title: 'TAPD',
+            use: '拉待办、读需求与缺陷、流转状态、发评论',
+            detect: '会话里有 mcp__tapd__ 开头的工具（服务器名必须是 tapd）',
+            install: 'claude mcp add tapd -e TAPD_ACCESS_TOKEN=<令牌> -- uvx mcp-server-tapd',
+            account: '需要 TAPD 个人访问令牌，在 TAPD 的个人设置里申请',
+            roles: [...WORK_ROLES]
+        })
+        expect(depList.find(i => i.id === 'git')?.install).toBeUndefined()
+        const tour = tourOf()
+        expect([tour.rules.length, tour.check.length, tour.features.length, tour.finish.length]).toEqual([6, 5, 5, 3])
+        expect(tour.steps['other:execute']).toBe('一句话说明：按对齐稿做，做的过程中发现和对齐稿不一致会先停下来问。')
+        expect(tour.fallback.startsWith('一句话说明这一步真实使用时做什么')).toBe(true)
+        expect(parseDeps('')).toEqual({ reason: '读不到' })
+        expect(parseDeps('{')).toEqual({ reason: '不是合法 JSON' })
+        expect(parseDeps('[]')).toEqual({ reason: '要是一个 JSON 对象' })
+        expect(parseDeps('{"version":2,"items":[]}')).toEqual({ reason: 'version 2 比本 mod 认识的新（1），先更新 mod' })
+        expect(parseDeps('{"version":1}')).toEqual({ reason: '缺少 items 数组' })
+        expect(parseTour('')).toEqual({ reason: '读不到' })
+        expect(parseTour('{"version":"1"}')).toEqual({ reason: 'version 要是 1' })
+        const item = (patch: Record<string, unknown>) => ({ id: 'a', kind: 'mcp', title: '甲', use: '用', detect: '查', ...patch })
+        const loose = parseDeps(
+            JSON.stringify({
+                items: [item({}), item({ title: '重复' }), item({ id: 'B' }), item({ id: 'c', kind: 'app' }), item({ id: 'd', title: ' ' }), item({ id: 'e', install: 3, roles: ['test', 'ops'] }), 'x']
+            })
+        )
+        expect(loose).toEqual({
+            depList: [
+                { id: 'a', kind: 'mcp', title: '甲', use: '用', detect: '查', roles: [...WORK_ROLES] },
+                { id: 'e', kind: 'mcp', title: '甲', use: '用', detect: '查', roles: ['test'] }
+            ],
+            skippedCount: 5
+        })
+        expect(parseTour(JSON.stringify({ rules: ['甲', 3, ' '], steps: { x: '乙', y: 1 }, features: '不是数组' }))).toEqual({
+            tour: { rules: ['甲'], check: [], steps: { x: '乙' }, fallback: '一句话说明这一步真实使用时做什么；问用户这一步需要事先准备什么数据或工具，记进资料。', features: [], finish: [] }
+        })
+    })
+
+    test('按工种筛依赖；演练文字与工作流配对：先「<工作流 id>:<步骤键>」再「<步骤键>」，都没有用 fallback；六个内置工作流的每一步都有自己的演练文字', () => {
+        const depList = depsOf()
+        const idsOf = (role: WorkRole) => depsOfRole(depList, role).map(i => i.id)
+        expect(idsOf('frontend')).toEqual(['tapd', 'li-yuque-skills', 'chrome-devtools', 'figma', 'context7', 'git', 'node'])
+        expect(idsOf('backend')).toEqual(['tapd', 'li-yuque-skills', 'context7', 'git', 'node'])
+        expect(idsOf('test')).toEqual(['tapd', 'li-yuque-skills', 'chrome-devtools', 'node'])
+        expect(idsOf('product')).toEqual(['tapd', 'li-yuque-skills', 'chrome-devtools', 'figma', 'node'])
+        expect(idsOf('other')).toEqual(['tapd', 'li-yuque-skills', 'node'])
+        const tour = tourOf()
+        const other = tourStepsOf(tour, 'other', builtinOf('other').story)
+        expect(other.map(i => i.key)).toEqual(['fetch', 'sort', 'read', 'align', 'execute', 'check', 'tapd'])
+        expect(other[4]).toEqual({ key: 'execute', title: '执行', what: '按对齐稿完成工作', guide: tour.steps['other:execute'] })
+        /* 测试工作流的 execute 没有 test:execute，用通用的 execute */
+        expect(tourStepsOf(tour, 'test', builtinOf('test').story).find(i => i.key === 'execute')?.guide).toBe(tour.steps.execute)
+        expect(stepGuideOf(tour, 'project', 'deploy')).toBe(tour.fallback)
+        expect(stepGuideOf(tour, 'other', 'fetch')).toBe(tour.steps.fetch)
+        expect(WORK_ROLES.every(role => tourStepsOf(tour, role, builtinOf(role).story).every(i => i.guide !== tour.fallback))).toBe(true)
+        /* 代码里的前端步骤没有 what */
+        expect(tourStepsOf(tour, 'frontend', FALLBACK_WORKFLOW.story)[0]).toEqual({ key: 'fetch', title: '拉取 TAPD', what: '', guide: tour.steps.fetch })
+    })
+
+    test('演练脚本：开头写演示条目与进度、演练工具、资料目录、工种与工作流；接着总规则 → 体检（含本工种依赖）→ 走流程 → 功能点 → 收尾 → 本项目概况；依赖清单不能用时说明跳过体检', () => {
+        const tour = tourOf()
+        const options = {
+            tour,
+            deps: { depList: depsOfRole(depsOf(), 'test'), skippedCount: 0 },
+            roleTitle: '测试',
+            workflowLabel: '内置 · 测试',
+            stepList: tourStepsOf(tour, 'test', builtinOf('test').story),
+            sharedDir: SHARED,
+            dataDir: 'D:/data/demo',
+            overview: '项目：演示'
+        }
+        const script = tourScript(options)
+        const order = ['演练脚本：', '\n\n总规则\n', '\n\n第一部分 体检\n', '\n\n第二部分 走流程（共 11 个环节，按顺序）\n', '\n\n第三部分 功能点', '\n\n收尾\n', '\n\n本项目概况\n']
+        const indexList = order.map(i => script.indexOf(i))
+        expect(indexList.every((n, i) => n >= 0 && (i === 0 || n > (indexList[i - 1] ?? 0)))).toBe(true)
+        expect(script).toContain(`演示条目：ID demo，面板进行中区的「${DEMO_TITLE}」，已记到本会话。进入一个环节时调 mcp__xiaoxiaoli__progress（id 传 demo，step 传步骤键，status 传 doing）`)
+        expect(script).toContain('最后一个环节（tapd）做完传 status=done（工具还没加载时先用 ToolSearch 查 select:mcp__xiaoxiaoli__progress）')
+        expect(script).toContain('演练工具就是 mcp__xiaoxiaoli__guide：体检做完传 action=check 与 results')
+        expect(script).toContain(`各项目通用的记进通用资料目录 ${SHARED}；只属于本项目的记进项目资料目录 D:/data/demo；两处都有的以项目的为准`)
+        expect(script).toContain('工种：测试；工作流：内置 · 测试（走流程共 11 个环节）。')
+        expect(script).toContain(`总规则\n1. ${tour.rules[0]}`)
+        expect(script).toContain(`第一部分 体检\n1. ${tour.check[0]}`)
+        expect(script).toContain('依赖清单（测试用得到的 4 项）：')
+        expect(script).toContain(
+            '- tapd（MCP）TAPD：拉待办、读需求与缺陷、流转状态、发评论；检测：会话里有 mcp__tapd__ 开头的工具（服务器名必须是 tapd）；安装：claude mcp add tapd -e TAPD_ACCESS_TOKEN=<令牌> -- uvx mcp-server-tapd；账号：需要 TAPD 个人访问令牌，在 TAPD 的个人设置里申请'
+        )
+        expect(script).toContain('- node（命令行工具）Node.js：运行 npx 安装和启动上面的 MCP 与 skill；检测：运行 node --version 有输出；安装：清单里没写')
+        expect(script).not.toContain('- figma（')
+        expect(script).toContain(`7. execute 执行测试\n   真实使用：在浏览器或接口上逐条执行用例，记结果与截图\n   演练：${tour.steps.execute}`)
+        expect(script).toContain(`第三部分 功能点（走完流程后逐条指给用户看）\n1. ${tour.features[0]}`)
+        expect(script).toContain(`收尾\n1. ${tour.finish[0]}`)
+        expect(script.endsWith('本项目概况\n项目：演示')).toBe(true)
+        const skipped = tourScript({ ...options, deps: { reason: '不是合法 JSON' }, sharedDir: '', dataDir: '' })
+        expect(skipped).toContain('依赖清单 guide/deps.json 不能用（不是合法 JSON），这次跳过体检，不调 check，直接进入第二部分')
+        expect(skipped).toContain('取不到用户目录，没有通用资料目录；本项目是项目内模式，只属于本项目的按项目内文档约定的位置记')
+        expect(tourScript({ ...options, deps: { depList: [], skippedCount: 2 } })).toContain('依赖清单里没有测试用得到的项（清单里有 2 项格式不对，已跳过），这次跳过体检，不调 check')
+    })
+
+    test('guide 工具参数与体检结果：action 只认三种，check 要 results 对象（也认 JSON 文字）；不认识的 id、值不对的丢掉；env.json 宽松读、整份换掉 results、别的字段保留；按工种算缺项', () => {
+        const depList = depsOf()
+        expect(toGuideInput({ action: 'start' })).toEqual({ action: 'start' })
+        expect(toGuideInput({ action: 'go' })).toBe('action 只能是 start、check、finish')
+        expect(toGuideInput({ action: 'check' })).toBe('check 要给 results 对象，如 { "tapd": "ok", "figma": "missing" }')
+        expect(toGuideInput({ action: 'check', results: '{"tapd":"ok"}' })).toEqual({ action: 'check', results: { tapd: 'ok' } })
+        expect(toGuideInput({ action: 'finish', summary: 3 })).toBe('summary 要是文字')
+        expect(toGuideInput({ action: 'finish' })).toEqual({ action: 'finish' })
+        expect(toGuideInput({ action: 'finish', summary: '好' })).toEqual({ action: 'finish', summary: '好' })
+        const checked = toCheckResults({ tapd: 'ok', figma: 'missing', 'li-yuque-skills': 'skipped', git: 'yes', foo: 'ok' }, depList)
+        expect(checked).toEqual({ results: { tapd: 'ok', figma: 'missing', 'li-yuque-skills': 'skipped' }, unknownList: ['foo'], invalidList: ['git'] })
+        expect(checkReplyText('D:/e/env.json', checked, depList)).toBe(
+            '已记下体检结果（写入 D:/e/env.json）：就绪 1 项；缺 1 项（Figma）；跳过 1 项（语雀）；不认识的 id 已丢掉：foo；值不对的已丢掉（只能是 ok、missing、skipped）：git'
+        )
+        expect(checkReplyText('/e', { results: { tapd: 'ok' }, unknownList: [], invalidList: [] }, depList)).toBe('已记下体检结果（写入 /e）：就绪 1 项；没有缺的')
+        expect(parseEnv('')).toEqual({ checkedAt: '', results: {}, isNewer: false })
+        expect(parseEnv('{"version":2}')).toEqual({ checkedAt: '', results: {}, isNewer: true })
+        expect(parseEnv(JSON.stringify({ version: 1, checkedAt: UPDATED, results: { tapd: 'ok', figma: 'bad' } }))).toEqual({ checkedAt: UPDATED, results: { tapd: 'ok' }, isNewer: false })
+        const text = envText(JSON.stringify({ version: 1, checkedAt: 'old', results: { git: 'ok' }, note: '保留' }), { checkedAt: UPDATED, results: { tapd: 'missing' } })
+        expect(JSON.parse(text)).toEqual({ version: 1, note: '保留', checkedAt: UPDATED, results: { tapd: 'missing' } })
+        const record = parseEnv(envText('', { checkedAt: UPDATED, results: { tapd: 'missing', figma: 'missing', 'li-yuque-skills': 'skipped', git: 'ok' } }))
+        expect(envStateOf(depsOfRole(depList, 'test'), record)).toEqual({ checkedAt: UPDATED, missingList: ['TAPD'], skippedList: ['语雀'] })
+        expect(envStateOf(depsOfRole(depList, 'frontend'), record)).toEqual({ checkedAt: UPDATED, missingList: ['TAPD', 'Figma'], skippedList: ['语雀'] })
+        expect(envStateOf(null, record)).toEqual({ checkedAt: UPDATED, missingList: ['tapd', 'figma'], skippedList: ['li-yuque-skills'] })
+        expect(envStateOf(depList, parseEnv(''))).toBeNull()
+    })
+
+    test('档案里的演练：只认 done、declined；记演练时写 tour 与 tourAt（小结存 tourSummary，超长截断，没带去掉旧的），别的字段保留；该不该出演练引导', () => {
+        expect(parseProfile('{"version":1,"name":"小美","tour":"done"}').tour).toBe('done')
+        expect(parseProfile('{"version":1,"skipped":true,"tour":"declined"}').tour).toBe('declined')
+        expect('tour' in parseProfile('{"version":1,"skipped":true,"tour":"maybe"}')).toBe(false)
+        const old = JSON.stringify({ version: 1, name: '小美', role: 'test', tourSummary: '旧的', theme: 'dark' })
+        expect(JSON.parse(profileText(old, { tour: 'declined', tourAt: UPDATED }))).toEqual({ version: 1, name: '小美', role: 'test', theme: 'dark', tour: 'declined', tourAt: UPDATED })
+        expect((JSON.parse(profileText(old, { tour: 'done', tourAt: UPDATED, summary: ' 都就绪 ' })) as { tourSummary: string }).tourSummary).toBe('都就绪')
+        expect([...(JSON.parse(profileText('', { tour: 'done', tourAt: UPDATED, summary: '字'.repeat(600) })) as { tourSummary: string }).tourSummary]).toHaveLength(500)
+        /* 起名、改工种时演练记录原样保留 */
+        const toured = JSON.stringify({ version: 1, skipped: true, tour: 'done' })
+        expect(JSON.parse(profileText(toured, { name: '小美' }))).toEqual({ version: 1, name: '小美', tour: 'done' })
+        expect(JSON.parse(profileText(toured, { role: 'backend' }))).toEqual({ version: 1, skipped: true, tour: 'done', role: 'backend' })
+        const base: ProfileStateType = { name: '', isSkipped: false, isNewer: false, isGuided: false, role: '', path: PROFILE_PATH }
+        expect(isTourPending(base)).toBe(true)
+        /* 还没起名时先出起名引导，演练引导不同时出 */
+        expect(isTourOffered(base)).toBe(false)
+        expect(isTourOffered({ ...base, isSkipped: true })).toBe(true)
+        expect(isTourOffered({ ...base, name: '小美' })).toBe(true)
+        expect(isTourOffered({ ...base, name: '小美', tour: 'done' })).toBe(false)
+        expect(isTourOffered({ ...base, name: '小美', tour: 'declined' })).toBe(false)
+        expect(isTourPending({ ...base, path: '' })).toBe(false)
+        expect(isTourPending({ ...base, isNewer: true })).toBe(false)
+    })
+
+    test('设置引导多一步演练：保存那条末尾加「（下一条除外）」，再用 AskUserQuestion 问「现在走」「以后再说」；不问时与 0.7.0 相同；/xiaoxiaoli tour 那段话', () => {
+        const plain = setupPrompt({ name: '', isUnbound: false, projectName: 'demo' })
+        const lineList = setupPrompt({ name: '', isUnbound: false, projectName: 'demo', isTourOffered: true }).split('\n')
+        expect(lineList).toHaveLength(6)
+        expect(lineList[3]?.endsWith('然后用一两句话告诉我结果，不要做别的事（下一条除外）')).toBe(true)
+        expect(lineList[4]?.startsWith('4. 保存成功后，再用 AskUserQuestion 问我要不要花几分钟走一遍演练')).toBe(true)
+        expect(lineList[4]).toContain('不建分支、不提交、不改 TAPD')
+        expect(lineList[4]).toContain('选项给「现在走」「以后再说」')
+        expect(lineList[4]).toContain('选「现在走」就调 mcp__xiaoxiaoli__guide，action 传 start（工具还没加载时先用 ToolSearch 查 select:mcp__xiaoxiaoli__guide）')
+        expect(lineList[4]).toContain('选「以后再说」就告诉我以后输入 /xiaoxiaoli tour 可以再来')
+        expect(lineList[5]).toBe(plain.split('\n')[4]?.replace(/^4\./, '5.'))
+        expect(plain.split('\n')).toHaveLength(5)
+        expect(plain).not.toContain('mcp__xiaoxiaoli__guide')
+        const tour = tourPrompt().split('\n')
+        expect(tour[0]).toBe('走一遍演练（来自工作台面板的「走一遍演练」或 /xiaoxiaoli tour），按下面做：')
+        expect(tour[1]?.startsWith('1. 调 mcp__xiaoxiaoli__guide，action 传 start')).toBe(true)
+        expect(tour[2]).toContain('调 mcp__xiaoxiaoli__guide（action 传 finish）收尾，告诉我以后输入 /xiaoxiaoli tour 可以再来')
+    })
+
+    test('面板：起了名（或先不设）、演练还没处理过时引导位置出「走一遍演练」「不用了」两行；和起名引导不同时出；沉浸时、进行中区有演示条目时不出', () => {
+        const lineList = buildBoard(boardInput({ isTourOffered: true }), 60)
+        const start = lineText(lineList[1] as BoardLineType)
+        const skip = lineText(lineList[2] as BoardLineType)
+        expect([lineList[1]?.action, lineList[2]?.action]).toEqual([ACTION_TOUR_START, ACTION_TOUR_SKIP])
+        expect(start.startsWith(TOUR_GUIDE_TEXT) && start.endsWith(TOUR_START_TEXT)).toBe(true)
+        expect(skip.startsWith(TOUR_SKIP_HINT_TEXT) && skip.endsWith(TOUR_SKIP_TEXT)).toBe(true)
+        expect([start, skip].map(displayWidth)).toEqual([58, 58])
+        expect(lineList[3]?.action).toBeUndefined()
+        expect(lineList[HEADER_ROW + GUIDE_ROWS]?.action).toBe(ACTION_REFRESH)
+        const both = buildBoard(boardInput({ isSetupPending: true, isTourOffered: true }), 60)
+        expect(both.slice(1, 3).map(i => i.action)).toEqual([ACTION_SETUP_START, ACTION_SETUP_SKIP])
+        expect(both.some(i => i.action === ACTION_TOUR_START)).toBe(false)
+        const focus = buildBoard(boardInput({ isTourOffered: true, isFocus: true }), 60)
+        expect(focus.some(i => i.action === ACTION_TOUR_START || i.action === ACTION_TOUR_SKIP)).toBe(false)
+        expect(focus[HEADER_ROW]?.action).toBe(ACTION_REFRESH)
+        const running = buildBoard(boardInput({ isTourOffered: true, progress: progressOf(newDemoTask({ updatedAt: UPDATED, sessionId: SESSION_ID })) }), 60)
+        expect(running.some(i => i.action === ACTION_TOUR_START)).toBe(false)
+        expect(running[HEADER_ROW]?.action).toBe(ACTION_REFRESH)
+        const unbound = buildBoard(boardInput({ config: null, workplace: { ...WORKPLACE, mode: 'global' }, isTourOffered: true }), 60)
+        expect(unbound.slice(1, 3).map(i => i.action)).toEqual([ACTION_TOUR_START, ACTION_TOUR_SKIP])
+        const narrow = buildBoard(boardInput({ isTourOffered: true }), 24)
+        expect(lineText(narrow[1] as BoardLineType).endsWith(TOUR_START_TEXT)).toBe(true)
+        expect(lineText(narrow[2] as BoardLineType).endsWith(TOUR_SKIP_TEXT)).toBe(true)
+        expect(narrow.every(i => displayWidth(i.segList.map(seg => seg.text).join('')) <= 23)).toBe(true)
+    })
+
+    test('面板与状态行里的演示条目：类型标的位置标「演」、不显示 ID；状态行写「演练」；体检有缺项时标题行下面多一行不可点的说明，没缺的、沉浸时不出', () => {
+        const demo = setStep(newDemoTask({ updatedAt: UPDATED, sessionId: SESSION_ID }), { key: 'fetch', status: 'doing', updatedAt: UPDATED })
+        const texts = buildBoard(boardInput({ progress: progressOf(demo) }), 60).map(lineText)
+        expect(texts.some(i => i.startsWith(`演 ${DEMO_TITLE}`))).toBe(true)
+        expect(texts.some(i => i.includes(' demo '))).toBe(false)
+        const folded = buildBoard(boardInput({ progress: progressOf({ ...demo, sessionId: OTHER_SESSION }) }), 60).map(lineText)
+        expect(folded.some(i => i.startsWith(`演 ${DEMO_TITLE} · 拉取 TAPD`))).toBe(true)
+        expect(statusText([demo], SESSION_ID, true)).toBe('小小黎 · 演练 第 1 步 拉取 TAPD 中')
+        const env = { checkedAt: UPDATED, missingList: ['Figma', '三方库文档'], skippedList: ['语雀'] }
+        const withEnv = buildBoard(boardInput({ env }), 60)
+        const envLine = lineText(withEnv[HEADER_ROW + 1] as BoardLineType)
+        expect(envLine.startsWith('环境：缺 2 项（Figma、三方库文档）')).toBe(true)
+        expect(envLine.endsWith(ENV_HINT_TEXT)).toBe(true)
+        expect(displayWidth(envLine)).toBe(58)
+        expect(withEnv[HEADER_ROW + 1]?.action).toBeUndefined()
+        expect(/^-+$/.test(lineText(withEnv[HEADER_ROW + 2] as BoardLineType))).toBe(true)
+        expect(/^-+$/.test(lineText(buildBoard(boardInput({ env: { ...env, missingList: [] } }), 60)[HEADER_ROW + 1] as BoardLineType))).toBe(true)
+        expect(buildBoard(boardInput({ env, isFocus: true }), 60).map(lineText).some(i => i.startsWith('环境：'))).toBe(false)
+        const off = buildBoard(boardInput({ env, workplace: { ...WORKPLACE, mode: 'global', systems: { tapd: false } } }), 60)
+        expect(lineText(off[HEADER_ROW + 1] as BoardLineType).startsWith('环境：缺 2 项')).toBe(true)
+    })
+
+    test('演示条目不算手上有活、不和待办对应：分流照常在本会话开工；findTask、findStepTask 与开工态都不认它（下面挂了真实任务也不认）；进度工具只放宽 demo，不能新建它；写回读回不变', () => {
+        const demo = newDemoTask({ updatedAt: UPDATED, sessionId: SESSION_ID })
+        const route = { id: '1000101', workspaceId: WS, sessionId: SESSION_ID, isMainCheckout: true, isBusy: false }
+        expect(routeStart({ ...route, taskList: [demo] })).toBe('submit')
+        expect(routeStart({ ...route, taskList: [demo, storyTask('1000102', '演示需求乙', 'develop', { sessionId: SESSION_ID })] })).toBe('new')
+        const [withTask] = progressSteps([demo], [{ id: 'demo', step: 'read', taskId: '1000101', taskTitle: '真实需求', taskStatus: 'doing' }])
+        if (withTask === undefined) throw new Error('demo')
+        expect(findTask([withTask], 'demo')).toBeUndefined()
+        expect(findStepTask([withTask], '1000101', WS)).toBeUndefined()
+        expect(startStateOf(todo(longId(WS, 1000101), 'High'), [withTask])).toBe('waiting')
+        expect(typeof toProgressInput({ id: 'demo' })).toBe('object')
+        expect(['demo2', 'DEMO', ''].map(id => toProgressInput({ id }))).toEqual(['demo2', 'DEMO', ''].map(() => 'id 要填需求或缺陷的 TAPD 短 ID（纯数字）'))
+        const input = toProgressInput({ id: 'demo', title: '自己建', step: 'fetch', status: 'doing' })
+        if (typeof input === 'string') throw new Error(input)
+        expect(applyProgress([], input, { updatedAt: UPDATED, sessionId: SESSION_ID })).toBe('state.json 里没有演示条目 demo，要先调 mcp__xiaoxiaoli__guide（action 传 start）建')
+        expect(demo).toEqual({ id: 'demo', kind: 'story', title: DEMO_TITLE, steps: STORY_STEPS.map(i => ({ key: i.key, title: i.title, status: 'todo' })), waiting: null, updatedAt: UPDATED, sessionId: SESSION_ID })
+        const testDemo = newDemoTask({ flow: flowOf({ workflow: builtinOf('test'), id: 'test' }, 'story'), updatedAt: UPDATED, sessionId: '' })
+        expect(testDemo.workflow).toBe('test')
+        expect(testDemo.sessionId).toBeUndefined()
+        expect(testDemo.steps.map(i => i.key)).toEqual(builtinOf('test').story.map(i => i.key))
+        expect(parseProgress(stringifyState([demo, testDemo])).taskList).toEqual([demo, testDemo])
+    })
+
+    test('guide start：放演示条目（测试工种的 11 步、全部未开始、记到本会话），返回脚本含各部分与本项目概况；面板上出「演」那条、演练引导收起；推进后再 start 会重置', async ($, on) => {
+        const global = globalFilesOf(FG_ROOT)
+        const profile = JSON.stringify({ version: 1, name: '小美', role: 'test' })
+        const { clock, seen, files } = await boot($, on, { cwd: FG_ROOT, files: { [global.config]: JSON.stringify(GLOBAL_CONFIG) }, profile })
+        /* 演练还没处理过：演练工具放进工具列表 */
+        expect(seen.tools).toContain('guide')
+        expect(seen.deferredTools).not.toContain('guide')
+        await clock.advance(1)
+        const ui = await mountPane($)
+        expect(await rowOf(ui, ACTION_TOUR_START)).toBe(HEADER_ROW)
+        const result = String((await callGuide($, { action: 'start' })).result)
+        const [demo] = parseProgress(files[global.state] ?? '').taskList
+        expect(demo?.id).toBe('demo')
+        expect(demo?.title).toBe(DEMO_TITLE)
+        expect(demo?.sessionId).toBe(SESSION_ID)
+        expect(demo?.workflow).toBe('test')
+        expect(demo?.steps.map(i => i.key)).toEqual(builtinOf('test').story.map(i => i.key))
+        expect(demo?.steps.every(i => i.status === 'todo')).toBe(true)
+        expect(result.startsWith('演练脚本：照着走')).toBe(true)
+        expect(result).toContain('工种：测试；工作流：内置 · 测试（走流程共 11 个环节）。')
+        expect(result).toContain('依赖清单（测试用得到的 4 项）：')
+        expect(result).toContain('7. execute 执行测试')
+        expect(result).toContain(`各项目通用的记进通用资料目录 ${SHARED}；只属于本项目的记进项目资料目录 ${global.dir}`)
+        expect(result).toContain('本项目概况\n项目：fg-demo（没设显示名，用目录名）')
+        expect(result).toContain('体检与演练：还没体检过；演练还没走')
+        expect(seen.statuses.at(-1)).toBe('小美 · 演练 第 1 步 拉取 TAPD')
+        expect((await textsOf(ui)).some(i => i.startsWith(`演 ${DEMO_TITLE}`))).toBe(true)
+        expect(await rowOf(ui, ACTION_TOUR_START)).toBe(-1)
+        await callProgress($, { id: 'demo', step: 'read', status: 'doing' })
+        expect(parseProgress(files[global.state] ?? '').taskList[0]?.steps[2]?.status).toBe('doing')
+        await callGuide($, { action: 'start' })
+        const again = parseProgress(files[global.state] ?? '').taskList
+        expect(again).toHaveLength(1)
+        expect(again[0]?.steps.every(i => i.status === 'todo')).toBe(true)
+        await ui.unmount()
+    })
+
+    test('演练中途点真实待办开工：演示条目不算手上有活，照常在本会话发出「开工 <ID>」、另建条目；伪造的开工消息开不了演示条目', async ($, on) => {
+        const { clock, seen, files } = await boot($, on)
+        await callGuide($, { action: 'start' })
+        await clock.advance(1)
+        const ui = await mountPane($)
+        await startFromPane(ui, STORY_A)
+        expect(seen.submitted).toEqual([{ text: `开工 ${STORY_A}`, asUser: true }])
+        expect(seen.copied).toEqual([])
+        expect(parseProgress(files[STATE_FILE] ?? '').taskList.map(i => i.id)).toEqual(['demo', '1000101'])
+        await ui.post({ type: 'row', action: 'todo:demo' }, { in: 'board' })
+        await ui.post({ type: 'row', action: 'start:demo' }, { in: 'board' })
+        expect(seen.submitted).toHaveLength(1)
+        expect(seen.copied).toEqual([])
+        await ui.unmount()
+    })
+
+    test('进度工具推进演示条目：id 传 demo 照常推进与设等待，面板标「等你」；还没 start 时不能新建 demo', async ($, on) => {
+        const { clock, files } = await boot($, on)
+        expect((await callProgress($, { id: 'demo', title: '自己建', step: 'fetch', status: 'doing' })).deny).toBe(
+            '小小黎：state.json 里没有演示条目 demo，要先调 mcp__xiaoxiaoli__guide（action 传 start）建，没有写入'
+        )
+        expect(files[STATE_FILE]).toBeUndefined()
+        await callGuide($, { action: 'start' })
+        expect(String((await callProgress($, { id: 'demo', step: 'align', status: 'doing', waiting: 'align' })).result)).toBe(`已更新 demo：第 5 步 对齐需求中（已写入 ${STATE_FILE}）`)
+        expect(parseProgress(files[STATE_FILE] ?? '').taskList[0]?.waiting).toBe('align')
+        await clock.advance(1)
+        const ui = await mountPane($)
+        expect((await textsOf(ui)).some(i => i.startsWith(`演 ${DEMO_TITLE}  等你：对齐稿`))).toBe(true)
+        await ui.unmount()
+    })
+
+    test('guide check：按依赖清单整理后整份写进全局根目录的 env.json，丢掉不认识的 id 与值不对的；面板标题行下面出缺项，概况里有上次体检时间与缺的项；换工种后按新工种重算', async ($, on) => {
+        const global = globalFilesOf(FG_ROOT)
+        const { clock, files } = await boot($, on, { cwd: FG_ROOT, files: { [global.config]: JSON.stringify(GLOBAL_CONFIG) } })
+        const results = { tapd: 'ok', figma: 'missing', context7: 'missing', 'li-yuque-skills': 'skipped', foo: 'ok', git: 'bad' }
+        expect(String((await callGuide($, { action: 'check', results })).result)).toBe(
+            `已记下体检结果（写入 ${ENV_PATH}）：就绪 1 项；缺 2 项（Figma、三方库文档）；跳过 1 项（语雀）；不认识的 id 已丢掉：foo；值不对的已丢掉（只能是 ok、missing、skipped）：git`
+        )
+        expect(JSON.parse(files[ENV_PATH] ?? '')).toEqual({ version: 1, checkedAt: NOW_ISO, results: { tapd: 'ok', figma: 'missing', context7: 'missing', 'li-yuque-skills': 'skipped' } })
+        await clock.advance(1)
+        const ui = await mountPane($)
+        const texts = await textsOf(ui)
+        expect(texts[HEADER_ROW + 1]?.startsWith('环境：缺 2 项（Figma、三方库文档）')).toBe(true)
+        expect(texts[HEADER_ROW + 1]?.endsWith(ENV_HINT_TEXT)).toBe(true)
+        expect((await linesOf(ui))[HEADER_ROW + 1]?.action).toBeUndefined()
+        const checkedText = `${todayText(NOW)} ${clockText(NOW)}`
+        expect((await runCommand($, 'project')).text).toContain(`\n体检与演练：上次体检 ${checkedText}，缺 Figma、三方库文档，跳过 语雀；演练已走过`)
+        /* 测试工种用不到 Figma 与三方库文档 */
+        await runCommand($, 'role test')
+        expect((await textsOf(ui))[HEADER_ROW + 1]?.startsWith('环境')).toBe(false)
+        expect((await runCommand($, 'project')).text).toContain(`\n体检与演练：上次体检 ${checkedText}，跳过 语雀；演练已走过`)
+        await ui.unmount()
+    })
+
+    test('guide 工具的参数与结果不对：如实拒绝、不写入；env.json 版本比本 mod 新时不覆盖', async ($, on) => {
+        const newer = JSON.stringify({ version: 2, checkedAt: 'x', results: {} })
+        const { seen, files } = await boot($, on, { files: { [CONFIG_FILE]: JSON.stringify(CONFIG), [ENV_PATH]: newer } })
+        expect((await callGuide($, { action: 'go' })).deny).toBe('小小黎：参数不对，action 只能是 start、check、finish，没有写入')
+        expect((await callGuide($, { action: 'check' })).deny).toBe('小小黎：参数不对，check 要给 results 对象，如 { "tapd": "ok", "figma": "missing" }，没有写入')
+        expect((await callGuide($, { action: 'check', results: { foo: 'ok', tapd: 'yes' } })).deny).toBe(
+            '小小黎：results 里没有可记的结果（键要是依赖清单里的 id：tapd、li-yuque-skills、chrome-devtools、figma、context7、git、node；值只能是 ok、missing、skipped），没有写入'
+        )
+        expect((await callGuide($, { action: 'finish', summary: 1 })).deny).toBe('小小黎：参数不对，summary 要是文字，没有写入')
+        expect((await callGuide($, { action: 'check', results: { tapd: 'ok' } })).deny).toBe(`小小黎：${ENV_PATH} 是更新版本的 mod 写的，先更新 mod，没有写入`)
+        expect(files[ENV_PATH]).toBe(newer)
+        expect(seen.written).toEqual([])
+    })
+
+    test('依赖清单 guide/deps.json 不能用：start 照常、脚本里说明跳过体检；check 如实拒绝', async ($, on) => {
+        const { seen } = await boot($, on, { guides: { deps: '{坏' } })
+        expect(String((await callGuide($, { action: 'start' })).result)).toContain('依赖清单 guide/deps.json 不能用（不是合法 JSON），这次跳过体检，不调 check，直接进入第二部分')
+        expect((await callGuide($, { action: 'check', results: { tapd: 'ok' } })).deny).toBe('小小黎：依赖清单 guide/deps.json 不能用（不是合法 JSON），体检结果对不上，没有写入')
+        expect(seen.written).toEqual([STATE_FILE])
+    })
+
+    test('写文件失败：start 不建演示条目、check 不记，都如实拒绝并带原因', async ($, on) => {
+        await boot($, on, { writeDenied: true })
+        const start = String((await callGuide($, { action: 'start' })).deny)
+        expect(start.startsWith(`小小黎：写 ${STATE_FILE} 失败（`)).toBe(true)
+        expect(start.endsWith('），没有建演示条目')).toBe(true)
+        const check = String((await callGuide($, { action: 'check', results: { tapd: 'ok' } })).deny)
+        expect(check.startsWith(`小小黎：写 ${ENV_PATH} 失败（`)).toBe(true)
+        expect(check.endsWith('），没有写入')).toBe(true)
+    })
+
+    test('取不到全局根目录：start 照常建演示条目；check 如实说存不了；finish 清掉演示条目、说明演练记不下，再 finish 时如实拒绝', async ($, on) => {
+        const { files } = await boot($, on, { globalRoot: null })
+        expect(String((await callGuide($, { action: 'start' })).result)).toContain('取不到用户目录，没有通用资料目录')
+        expect(parseProgress(files[STATE_FILE] ?? '').taskList.map(i => i.id)).toEqual(['demo'])
+        expect((await callGuide($, { action: 'check', results: { tapd: 'ok' } })).deny).toBe(`小小黎：${NO_GLOBAL_ROOT_TEXT}，体检结果存不了，没有写入`)
+        expect(String((await callGuide($, { action: 'finish' })).result)).toBe(`已移除演示条目（写入 ${STATE_FILE}）；演练走过没记下：${NO_GLOBAL_ROOT_TEXT}`)
+        expect(parseProgress(files[STATE_FILE] ?? '').taskList).toEqual([])
+        expect((await callGuide($, { action: 'finish' })).deny).toBe(`小小黎：演练走过没记下：${NO_GLOBAL_ROOT_TEXT}，没有写入`)
+    })
+
+    test('guide finish：移除演示条目，在 profile.json 记 tour: done、tourAt 与小结（别的字段保留），面板演练引导不再出；没有演示条目也照样记', async ($, on) => {
+        const { clock, files } = await boot($, on, { profile: JSON.stringify({ version: 1, name: '小美', theme: 'dark' }) })
+        await clock.advance(1)
+        const ui = await mountPane($)
+        expect(await rowOf(ui, ACTION_TOUR_START)).toBe(HEADER_ROW)
+        await callGuide($, { action: 'start' })
+        expect(String((await callGuide($, { action: 'finish', summary: '缺 Figma，其余就绪' })).result)).toBe(
+            `已移除演示条目（写入 ${STATE_FILE}）；已记下演练走过与小结（写入 ${PROFILE_PATH}），面板上不再出演练引导`
+        )
+        expect(parseProgress(files[STATE_FILE] ?? '').taskList).toEqual([])
+        expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual({ version: 1, name: '小美', theme: 'dark', tour: 'done', tourAt: AFTER_ISO, tourSummary: '缺 Figma，其余就绪' })
+        expect(await rowOf(ui, ACTION_TOUR_START)).toBe(-1)
+        expect((await linesOf(ui))[HEADER_ROW]?.action).toBe(ACTION_REFRESH)
+        expect(String((await callGuide($, { action: 'finish' })).result)).toBe(`已记下演练走过（写入 ${PROFILE_PATH}），面板上不再出演练引导`)
+        expect((JSON.parse(files[PROFILE_PATH] ?? '') as { tourSummary?: string }).tourSummary).toBeUndefined()
+        await ui.unmount()
+    })
+
+    test('面板「走一遍演练」以用户身份发出演练那段话（会话正忙时排队）；「不用了」记 tour: declined，两行消失，之后过时或伪造的按钮消息不写也不发', async ($, on) => {
+        const { clock, seen, files } = await boot($, on, { profile: JSON.stringify({ version: 1, skipped: true }) })
+        await clock.advance(1)
+        const ui = await mountPane($)
+        await click(ui, 5, await rowOf(ui, ACTION_TOUR_START))
+        expect(seen.submitted).toEqual([{ text: tourPrompt(), asUser: true }])
+        expect(seen.toasts.at(-1)).toBe('小小黎：已发出：走一遍演练')
+        expect(seen.written).toEqual([])
+        await $.turn.start({ text: '在忙', turnId: 't1' })
+        await click(ui, 5, await rowOf(ui, ACTION_TOUR_START))
+        expect(seen.toasts.at(-1)).toBe('小小黎：会话正忙，已排队：走一遍演练')
+        await click(ui, 5, await rowOf(ui, ACTION_TOUR_SKIP))
+        expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual({ version: 1, skipped: true, tour: 'declined', tourAt: AFTER_ISO })
+        expect(seen.toasts.at(-1)).toBe('小小黎：好的，不走演练，面板上不再提示；以后想走输入 /xiaoxiaoli tour')
+        expect(await rowOf(ui, ACTION_TOUR_START)).toBe(-1)
+        expect((await linesOf(ui))[HEADER_ROW]?.action).toBe(ACTION_REFRESH)
+        await ui.post({ type: 'row', action: ACTION_TOUR_SKIP }, { in: 'board' })
+        await ui.post({ type: 'row', action: ACTION_TOUR_START }, { in: 'board' })
+        expect(seen.written).toEqual([PROFILE_PATH])
+        expect(seen.submitted).toHaveLength(2)
+        await ui.unmount()
+    })
+
+    test('/xiaoxiaoli tour：排到下一拍发出演练那段话（走过演练的也能再走）；带参数时提示不带；用法里有 tour', async ($, on) => {
+        const { clock, seen } = await boot($, on)
+        expect((await runCommand($, 'tour')).text).toBe('小小黎：已发出：走一遍演练')
+        expect(seen.submitted).toEqual([])
+        await clock.advance(1)
+        expect(seen.submitted).toEqual([{ text: tourPrompt(), asUser: true }])
+        expect((await runCommand($, 'tour 现在')).text).toBe('小小黎：tour 不带参数')
+        expect((await runCommand($, 'nonsense')).text).toContain(' · tour 让 AI 带你走一遍演练（体检本机环境、按工作流模拟走一遍、讲功能点）')
+        expect(seen.submitted).toHaveLength(1)
+    })
+
+    test('演练脚本 guide/tour.json 不能用：tour 命令、面板按钮与 start 都如实说不能用、不发不建；设置引导里不问演练', async ($, on) => {
+        const { clock, seen, files } = await boot($, on, { profile: null, guides: { tour: '[]' } })
+        const why = '演练脚本 guide/tour.json 不能用（要是一个 JSON 对象）'
+        expect((await runCommand($, 'tour')).text).toBe(`小小黎：${why}，没有发起演练`)
+        expect((await callGuide($, { action: 'start' })).deny).toBe(`小小黎：${why}，没有建演示条目`)
+        expect((await runCommand($, 'setup')).text).toBe('小小黎：已发出：设置工作台')
+        await clock.advance(1)
+        expect(seen.submitted).toEqual([{ text: setupPrompt({ name: '', isUnbound: false, projectName: 'demo' }), asUser: true }])
+        await runCommand($, 'name 小美')
+        const ui = await mountPane($)
+        await click(ui, 5, await rowOf(ui, ACTION_TOUR_START))
+        expect(seen.toasts.at(-1)).toBe(`小美：${why}，没有发起演练`)
+        expect(seen.submitted).toHaveLength(1)
+        expect(files[STATE_FILE]).toBeUndefined()
+        await ui.unmount()
+    })
+
+    test('老用户（起了名、没有演练记录）：演练工具放进工具列表，面板出一次演练引导，起名引导不出', async ($, on) => {
+        const { clock, seen } = await boot($, on, { profile: NAMED })
+        expect(seen.deferredTools).not.toContain('guide')
+        await clock.advance(1)
+        const ui = await mountPane($)
+        expect(await rowOf(ui, ACTION_TOUR_START)).toBe(HEADER_ROW)
+        expect(await rowOf(ui, ACTION_TOUR_SKIP)).toBe(HEADER_ROW + 1)
+        expect(await rowOf(ui, ACTION_SETUP_START)).toBe(-1)
+        await ui.unmount()
+    })
+
+    test('选过「不用了」的档案：演练工具在 ToolSearch 后面，面板不出演练引导', async ($, on) => {
+        const { clock, seen } = await boot($, on, { profile: JSON.stringify({ version: 1, name: '小美', tour: 'declined' }) })
+        expect(seen.deferredTools).toContain('guide')
+        await clock.advance(1)
+        const ui = await mountPane($)
+        expect(await rowOf(ui, ACTION_TOUR_START)).toBe(-1)
+        expect((await linesOf(ui))[HEADER_ROW]?.action).toBe(ACTION_REFRESH)
+        await ui.unmount()
+    })
+
+    test('概况里体检与演练那一行：没体检过、有缺有跳过、都就绪；演练三种情况', () => {
+        const tail = '（输入 /xiaoxiaoli tour 可以再走一遍，顺带重新体检）'
+        expect(guideSummaryText({ checkedText: '', missingList: [], skippedList: [], tour: '' })).toBe(`体检与演练：还没体检过；演练还没走${tail}`)
+        expect(guideSummaryText({ checkedText: '2026-11-12 18:30', missingList: ['Figma'], skippedList: ['语雀'], tour: 'declined' })).toBe(
+            `体检与演练：上次体检 2026-11-12 18:30，缺 Figma，跳过 语雀；演练选了不用${tail}`
+        )
+        expect(guideSummaryText({ checkedText: '2026-11-12 18:30', missingList: [], skippedList: [], tour: 'done' })).toBe(
+            `体检与演练：上次体检 2026-11-12 18:30，本工种用得到的都就绪；演练已走过${tail}`
+        )
     })
 })
