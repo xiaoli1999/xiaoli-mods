@@ -33,8 +33,8 @@ const REASON_LIMIT = 160
 const VERSION_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/i
 /** 市场名：拼进命令前核对，只认字母、数字与 . _ - */
 const MARKET_PATTERN = /^[a-z0-9][a-z0-9._-]*$/i
-/** claude plugin update 在已是最新时的说法：这时并没有更新 */
-const ALREADY_LATEST_PATTERN = /already at the latest version/i
+/** claude plugin update 在已是最新时的说法，括号里是它认为的最新版本 */
+const ALREADY_LATEST_PATTERN = /already at the latest version(?:\s*\(([^)]*)\))?/i
 
 /** 解析后的版本号：主、次、修订 */
 export type VersionPartsType = readonly [number, number, number]
@@ -412,13 +412,28 @@ const fetchFirst = async (ports: UpdatePortsType, file: string): Promise<string 
 }
 
 /**
+ * claude plugin update 的输出说「已是最新」时，算不算已经装上了远端的新版：括号里的版本不比远端旧才算
+ * （同一天另一个会话刚更新过）；没写版本、版本认不出或比远端旧都算没装上（市场副本还没有新版）。
+ * @param output 命令输出
+ * @param remote 远端版本
+ * @returns 没说「已是最新」为 null；说了时为是否已装上
+ */
+export const latestIsInstalled = (output: string, remote: string): boolean | null => {
+    const match = ALREADY_LATEST_PATTERN.exec(output)
+    if (match === null) return null
+
+    return (compareVersion(match[1]?.trim() ?? '', remote) ?? -1) >= 0
+}
+
+/**
  * 插件市场安装、有新版时更新：等到会话空闲且另一个 mod 没在更新，占锁，先刷新市场副本再更新插件，放锁。
- * 两条命令都退出码为 0、且没有说「已是最新」才算更新成功。
+ * 两条命令都退出码为 0 才算成功；更新命令说「已是最新」时按 latestIsInstalled 判断。
  * @param ports 外部能力
  * @param marketplace 市场名
+ * @param remote 远端版本
  * @returns 成功为 ''，失败为原因；一直等不到为 null
  */
-const runMarketUpdate = async (ports: UpdatePortsType, marketplace: string): Promise<string | null> => {
+const runMarketUpdate = async (ports: UpdatePortsType, marketplace: string, remote: string): Promise<string | null> => {
     if (!(await waitTurn(ports, true))) return null
 
     await ports.writeLock(ports.mod)
@@ -429,7 +444,7 @@ const runMarketUpdate = async (ports: UpdatePortsType, marketplace: string): Pro
             if (result.exitCode !== 0) return failureReason(result)
             output = `${result.stdout}\n${result.stderr}`
         }
-        return ALREADY_LATEST_PATTERN.test(output) ? '插件市场的副本里还没有新版，稍后再试' : ''
+        return latestIsInstalled(output, remote) === false ? '插件市场的副本里还没有新版，稍后再试' : ''
     } finally {
         await ports.writeLock(undefined)
     }
@@ -488,7 +503,7 @@ export const runUpdateCheck = async (ports: UpdatePortsType): Promise<UpdateOutc
         return 'local-notified'
     }
 
-    const failed = await runMarketUpdate(ports, install.marketplace)
+    const failed = await runMarketUpdate(ports, install.marketplace, remote)
     if (failed === null) {
         ports.log('一直等不到会话空闲，这次不更新')
         return 'gave-up'

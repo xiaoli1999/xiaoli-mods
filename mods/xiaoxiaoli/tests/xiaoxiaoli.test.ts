@@ -210,6 +210,7 @@ import {
     isCheckedToday,
     isHeldByOther,
     isNewer,
+    latestIsInstalled,
     localNotice,
     manifestVersion,
     parseVersion,
@@ -4837,6 +4838,10 @@ describe('0.9.0：自动更新', () => {
         const latest = fake({ remote: NEWER, run: () => ran('xiaoxiaoli is already at the latest version (0.8.0).') })
         expect(await runUpdateCheck(latest.ports)).toBe('update-failed')
         expect(latest.seen.notices).toEqual([failedNotice(OPTIONS, '插件市场的副本里还没有新版，稍后再试', MANUAL)])
+        /* 同一天另一个会话刚更新过：说已是最新、版本就是远端的，算装上了 */
+        const done = fake({ remote: NEWER, run: () => ran('xiaoxiaoli is already at the latest version (0.9.0).') })
+        expect(await runUpdateCheck(done.ports)).toBe('updated')
+        expect([latestIsInstalled('ok', '0.9.0'), latestIsInstalled('is already at the latest version.', '0.9.0'), latestIsInstalled('already at the latest version (0.10.0)', '0.9.0')]).toEqual([null, false, true])
     })
 
     test('Windows 上 claude 起不来（npm 装的 .cmd）：同一条命令改经 cmd /c 再试；macOS / Linux 不试，直接按失败', async () => {

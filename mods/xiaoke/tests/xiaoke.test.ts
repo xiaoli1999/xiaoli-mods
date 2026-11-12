@@ -1649,6 +1649,9 @@ describe('0.5.0：自动更新', () => {
     const busy = fake({ remote: NEWER, busyList: [true, false] })
     expect(await runUpdateCheck(busy.ports)).toBe('updated')
     expect(busy.seen.slept).toBe(1)
+    // 说已是最新：版本就是远端的（别的会话刚更新过）算装上了，比远端旧算没更新上
+    expect(await runUpdateCheck(fake({ remote: NEWER, run: () => ran('xiaoke is already at the latest version (0.5.0).') }).ports)).toBe('updated')
+    expect(await runUpdateCheck(fake({ remote: NEWER, run: () => ran('xiaoke is already at the latest version (0.4.3).') }).ports)).toBe('update-failed')
   })
 
   /** 开一个会话：记下自动更新的请求、命令、提示与日志；$.store 用手边的 mem，看得到写进去的日期 */
