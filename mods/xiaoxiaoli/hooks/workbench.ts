@@ -376,7 +376,7 @@ export const parseProgress = (text: string): ProgressType => {
     }
     if (!isRecord(value) || !Array.isArray(value.tasks)) return { taskList: [], error: 'state.json 缺少 tasks 数组' }
     if (typeof value.version === 'number' && value.version > STATE_VERSION) {
-        return { taskList: [], error: `state.json 版本 ${value.version} 比小小黎新，先更新 mod` }
+        return { taskList: [], error: `state.json 版本 ${value.version} 比工作面板认识的新，先更新 mod` }
     }
 
     const rawList: unknown[] = value.tasks

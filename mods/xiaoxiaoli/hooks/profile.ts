@@ -1,7 +1,7 @@
 /**
  * @description 起名、工种与首次引导：全局档案 profile.json 的解析与写回（含工种、「已自动发起过」的标记与演练处理过没有）、
  * 名字规则（去后缀、长度、非法字符）、工种的认法、工作台全称与提示前缀、首次引导与演练引导要不要显示，
- * 以及「设置工作台」「走一遍演练」时发给 AI 的那段话；不依赖别的 hooks 模块，面板、状态行、开工消息都从这里取名字
+ * 以及「设置工作台」「走一遍演练」时发给 AI 的那段话；不依赖别的 hooks 模块，工作面板、状态行、开工消息都从这里取名字
  * @author xiao li
  * @createDate 2026-11-12 10:00
  */
@@ -27,8 +27,11 @@ export const ROLE_CHOICES_TEXT = WORK_ROLES.map(i => ROLE_TITLES[i]).join('、')
 export const PROFILE_FILE = 'profile.json'
 /** 档案的结构版本；文件里的版本比它新时名字用默认、不显示引导、不覆盖写 */
 export const PROFILE_VERSION = 1
-/** 没起名、选了先不设或档案读不懂时用的名字 */
-export const DEFAULT_NAME = '小小黎'
+/**
+ * 没起名、选了先不设或档案读不懂时用的名字（0.9.2 起由「小小黎」改为「小黎」）。档案里明确存着 name「小小黎」的
+ * （以前选了「保持默认」时会存下这个名字）照常当作用户起的名字，不改成新默认名，免得悄悄换掉标题与 TAPD 评论署名
+ */
+export const DEFAULT_NAME = '小黎'
 /** 名字后面接的后缀：名字 + 它 = 工作台全称 */
 export const WORKBENCH_SUFFIX = 'AI工作台'
 /** 名字最多几个字符，按码点数 */
@@ -197,7 +200,7 @@ export const nameOf = (profile: ProfileType): string => profile.name || DEFAULT_
 /**
  * 工作台全称：名字 + AI工作台。
  * @param name 名字
- * @returns 全称，如「小小黎AI工作台」
+ * @returns 全称，如「小黎AI工作台」
  */
 export const fullNameOf = (name: string): string => `${name}${WORKBENCH_SUFFIX}`
 
@@ -226,7 +229,7 @@ export const isSetupPending = (state: ProfileStateType): boolean =>
 export const isTourPending = (state: ProfileStateType): boolean => state.path !== '' && !state.isNewer && state.tour === undefined
 
 /**
- * 面板要不要在引导位置出「走一遍演练」「不用了」两行：演练还没处理过，且名字已经起了或选了先不设（和起名引导不同时出）。
+ * 工作面板要不要在引导位置出「走一遍演练」「不用了」两行：演练还没处理过，且名字已经起了或选了先不设（和起名引导不同时出）。
  * 老用户（起了名、没有演练记录）也会看到一次。
  * @param state $.state 里的档案
  * @returns 是否显示
@@ -293,24 +296,24 @@ export const setupPrompt = ({ name, role = '', isUnbound, projectName, isAuto = 
     ].join('')
     const later = [
         '我不想现在设（关掉提问、按了取消或说以后再说）时不要追问，也不要调 mcp__xiaoxiaoli__setup，',
-        '只告诉我以后想起名可以点工作台面板上的「开始设置」或输入 /xiaoxiaoli setup'
+        '只告诉我以后想起名可以点工作面板上的「开始设置」或输入 /xiaoxiaoli setup'
     ].join('')
     const stepList = [askName, askRole, ...(isUnbound ? [askBind] : []), save, ...(isTourOffered ? [askTour] : []), later]
     const head = isAuto
         ? '首次使用，自动发起设置工作台（只自动这一次），按下面做：'
-        : '设置工作台（来自工作台面板的「开始设置」或 /xiaoxiaoli setup），按下面做：'
+        : '设置工作台（来自工作面板的「开始设置」或 /xiaoxiaoli setup），按下面做：'
 
     return [head, ...stepList.map((step, index) => `${index + 1}. ${step}`)].join('\n')
 }
 
 /**
- * 面板「走一遍演练」与 /xiaoxiaoli tour 发进会话的那段话：让 AI 调 mcp__xiaoxiaoli__guide 的 start，照返回的脚本带着走；
+ * 工作面板「走一遍演练」与 /xiaoxiaoli tour 发进会话的那段话：让 AI 调 mcp__xiaoxiaoli__guide 的 start，照返回的脚本带着走；
  * 用户中途叫停就立刻停、调 finish 收尾并告诉以后的入口。
  * @returns 消息全文
  */
 export const tourPrompt = (): string =>
     [
-        '走一遍演练（来自工作台面板的「走一遍演练」或 /xiaoxiaoli tour），按下面做：',
+        '走一遍演练（来自工作面板的「走一遍演练」或 /xiaoxiaoli tour），按下面做：',
         `1. 调 ${GUIDE_TOOL_NAME}，action 传 start（${GUIDE_TOOL_LOAD}），照它返回的脚本一步步带我走：先体检，再按工作流模拟走一遍，最后讲功能点`,
         `2. 我中途说停或以后再说，就立刻停下，调 ${GUIDE_TOOL_NAME}（action 传 finish）收尾，告诉我以后输入 /xiaoxiaoli tour 可以再来`
     ].join('\n')

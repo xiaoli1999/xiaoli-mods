@@ -9,7 +9,7 @@
             "title": "拉取 TAPD",
             "slow": false,
             "what": "只读拉用户名下的需求、任务、缺陷，只展示不开工",
-            "tools": "tapd MCP、工作台面板",
+            "tools": "tapd MCP、工作面板",
             "output": "待办清单",
             "ask": "否；开工由用户点或说",
             "rules": ["用户待办用 get_todo，entity_type 分别取 story、task、bug；拉取不改任何状态"]

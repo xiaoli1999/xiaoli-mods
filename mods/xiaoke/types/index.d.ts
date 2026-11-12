@@ -162,7 +162,7 @@ declare module 'claude-code' {
       isWhispering: boolean
       /** 上一句悄悄话的花费说明 */
       lastWhisper: string
-      /** 小小黎侧栏开关（来自环境变量 XIAOXIAOLI_PANE）：show 时按钮显示「收工」，其余为 hide，显示「干活」 */
+      /** 工作面板的开关（来自环境变量 XIAOXIAOLI_PANE）：show 时按钮显示「收工」，其余为 hide，显示「干活」 */
       workbenchPane: 'show' | 'hide'
       /** 缓存保活：主对话 50 分钟没请求就旁路请求一次，续上 1 小时的提示词缓存 */
       keep: KeepAlive

@@ -1,5 +1,5 @@
 /**
- * @description 小小黎面板的自绘区域：按行画出 hooks 排好的内容，点击只认行号不认列，
+ * @description 工作面板的自绘区域：按行画出 hooks 排好的内容，点击只认行号不认列，
  * 所以 JetBrains 终端点中文时上报的列偏移不影响命中
  * @author xiao li
  * @createDate 2026-10-21 18:00

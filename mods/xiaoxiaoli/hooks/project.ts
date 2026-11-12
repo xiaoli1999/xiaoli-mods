@@ -22,7 +22,7 @@ export const SHARED_README_TEXT = [
     '- secrets.env：通用的测试账号等',
     '',
     '某个项目和这里不一样时，写在它自己的项目资料目录（projects/<项目键>/）里，两处都有的以项目的为准。',
-    '小小黎AI工作台 mod 不读这两个文件的内容，只看在不在。',
+    'AI 工作台的工作面板（插件 xiaoxiaoli）不读这两个文件的内容，只看在不在。',
     ''
 ].join('\n')
 /** 显示名最多几个字符（按码点数） */
@@ -258,7 +258,7 @@ export const projectSummaryText = (summary: ProjectSummaryType): string => {
         `项目：${name}`,
         `项目目录：${summary.dir}`,
         `项目配置：${summary.configPath}`,
-        `TAPD：${tapd}${isTapdOff ? '；本项目记着不用 TAPD（systems.tapd 为 false），面板不列 TAPD 项目、不拉待办' : ''}`,
+        `TAPD：${tapd}${isTapdOff ? '；本项目记着不用 TAPD（systems.tapd 为 false），工作面板不列 TAPD 项目、不拉待办' : ''}`,
         summary.isRepoMode
             ? '用到的系统：项目内模式不支持显示名与 systems（它们只存在全局项目目录，本 mod 不往项目仓库写文件）'
             : `用到的系统：${systemsText(summary.systems)}`,

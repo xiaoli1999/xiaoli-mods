@@ -51,15 +51,15 @@ export interface NewSessionPlanType {
     sharedDir?: string
 }
 
-/** 流程技能的名字：随工作台插件装的叫「插件名:技能名」，自己复制到 ~/.claude/skills 的叫技能名，两种都写上，AI 哪种都找得到 */
-export const WORKFLOW_SKILL_TEXT = 'xiaoli-workflow 技能（随工作台插件安装时名为 xiaoxiaoli:xiaoli-workflow）'
+/** 流程技能的名字：随工作面板插件装的叫「插件名:技能名」，自己复制到 ~/.claude/skills 的叫技能名，两种都写上，AI 哪种都找得到 */
+export const WORKFLOW_SKILL_TEXT = 'xiaoli-workflow 技能（随工作面板插件安装时名为 xiaoxiaoli:xiaoli-workflow）'
 
 /** 全局模式（项目里没有工作台文档）开工时带给 AI 的流程指引 */
 export const GLOBAL_GUIDE = `按 ${WORKFLOW_SKILL_TEXT}的流程执行，用 mcp__xiaoxiaoli__progress 推进进度；项目内有 docs/xiaoli/workflow.md 时以项目内文档为准`
 
 /**
  * 跟在流程指引后面的署名说明：让 AI 知道 TAPD 评论末尾署什么名。
- * @param fullName 工作台全称，如「小小黎AI工作台」
+ * @param fullName 工作台全称，如「小黎AI工作台」
  * @returns 说明
  */
 export const signText = (fullName: string): string => `TAPD 评论署名 ——${fullName}`
@@ -82,7 +82,7 @@ export interface StartPromptOptionsType {
     root: string
     /** 全局模式的全局项目目录，项目内模式不传或为 '' */
     dataDir?: string
-    /** 工作台全称，全局模式写进署名说明；不传为默认的「小小黎AI工作台」 */
+    /** 工作台全称，全局模式写进署名说明；不传为默认的「小黎AI工作台」 */
     fullName?: string
     /** 条目种类，全局模式定取工作流的哪一组；不传为 story */
     kind?: ProgressKind
@@ -98,7 +98,7 @@ export interface HerePromptOptionsType {
     root: string
     /** 全局项目目录 */
     dataDir: string
-    /** 工作台全称；不传为默认的「小小黎AI工作台」 */
+    /** 工作台全称；不传为默认的「小黎AI工作台」 */
     fullName?: string
     /** 条目种类；不传为 story */
     kind?: ProgressKind
@@ -112,7 +112,7 @@ export interface SubmitTextOptionsType {
     longId: string
     /** 全局模式的全局项目目录，项目内模式为 '' */
     dataDir: string
-    /** 工作台全称，全局模式写进署名说明；不传为默认的「小小黎AI工作台」 */
+    /** 工作台全称，全局模式写进署名说明；不传为默认的「小黎AI工作台」 */
     fullName?: string
     /** 条目种类，全局模式定取工作流的哪一组；不传为 story */
     kind?: ProgressKind

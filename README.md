@@ -1,15 +1,15 @@
 # 小黎 mods（xiaoli-mods）
 
-小黎的 AI 工作流沉淀。「小黎 mods」是这套东西（仓库、安装包）的总称，里面是两个 Claude Code mod：陪伴猫「小克」和小小黎 AI 工作台；工作台自带一个通用的开发流程 skill。
+小黎 mods 是安装包（也是这个仓库）的名字：装好后得到「<名字>AI工作台」，名字默认是「小黎」，可以随时改成自己的，比如叫「小王」就是「小王AI工作台」，TAPD 评论的署名也跟着变成「——小王AI工作台」。AI 工作台由两个 Claude Code mod 组成：趴在输入框上方的陪伴猫小克，和右侧的工作面板（拉 TAPD 待办、开工、看进度）；工作面板自带一个通用的开发流程 skill。整套是作者小黎的 AI 工作流沉淀。
 
 | 目录 | 是什么 |
 | --- | --- |
-| `mods/xiaoke` | 陪伴猫小克（`xiaoke` 既是它的名字，也是插件标识）：趴在输入框上方陪你干活。提示词缓存保活、看模型与思考强度、token 与额度预估、概括当前在做的事、定点久坐喝水提醒；按钮栏的「干活 / 收工」开关工作台面板。详见 [mods/xiaoke/README.md](mods/xiaoke/README.md) |
-| `mods/xiaoxiaoli` | 小小黎 AI 工作台：AI 工作流的载体。侧栏拉取并展示 TAPD 待办，点「开工」才开工；按工种走不同的工作流，按「步骤 → 任务 → 模块」显示进度。在任何项目里都能用，没绑定 TAPD 的项目问一次就记住。详见 [mods/xiaoxiaoli/README.md](mods/xiaoxiaoli/README.md) |
-| `mods/xiaoxiaoli/skills/xiaoli-workflow` | 通用 AI 开发流程 skill：TAPD 需求各环节、缺陷 6 步、必须先问的动作与 Git 规则。随工作台一起装，会话里叫 `xiaoxiaoli:xiaoli-workflow`；不用 Claude Code 的也能单独用 |
+| `mods/xiaoke` | 陪伴猫小克（`xiaoke` 既是它的名字，也是插件标识）：趴在输入框上方陪你干活。提示词缓存保活、看模型与思考强度、token 与额度预估、概括当前在做的事、定点久坐喝水提醒；按钮栏的「干活 / 收工」开关工作面板。详见 [mods/xiaoke/README.md](mods/xiaoke/README.md) |
+| `mods/xiaoxiaoli` | 工作面板：AI 工作台右侧那块，AI 工作流的载体，标题栏显示「<名字>AI工作台」。拉取并展示 TAPD 待办，点「开工」才开工；按工种走不同的工作流，按「步骤 → 任务 → 模块」显示进度。在任何项目里都能用，没绑定 TAPD 的项目问一次就记住。详见 [mods/xiaoxiaoli/README.md](mods/xiaoxiaoli/README.md) |
+| `mods/xiaoxiaoli/skills/xiaoli-workflow` | 通用 AI 开发流程 skill：TAPD 需求各环节、缺陷 6 步、必须先问的动作与 Git 规则。随工作面板一起装，会话里叫 `xiaoxiaoli:xiaoli-workflow`；不用 Claude Code 的也能单独用 |
 | `.claude-plugin/marketplace.json` | 插件市场清单：市场名 `xiaoli-mods`，列出上面两个 mod |
 
-命令：猫是 `/xiaoke`（如 `/xiaoke keep on|off` 开关缓存保活、`/xiaoke rest` 休息 2 分钟），工作台是 `/xiaoxiaoli` 与 `mcp__xiaoxiaoli__*` 工具。
+命令：猫是 `/xiaoke`（如 `/xiaoke keep on|off` 开关缓存保活、`/xiaoke rest` 休息 2 分钟），工作面板是 `/xiaoxiaoli` 与 `mcp__xiaoxiaoli__*` 工具（`xiaoxiaoli` 是工作面板这个插件的内部标识，沿用旧名）。
 
 ## 前置条件
 
@@ -37,23 +37,23 @@ claude plugin install xiaoke@xiaoli-mods
 /plugin install xiaoke --marketplace xiaoli1999/xiaoli-mods
 ```
 
-装好后重开 Claude Code，或在会话里输入 `/reload-plugins`。工作流 skill 随工作台一起装，不用另外复制；以前自己复制到 `~/.claude/skills/xiaoli-workflow` 的，装好后把那份删掉，免得两份不一致。
+装好后重开 Claude Code，或在会话里输入 `/reload-plugins`。工作流 skill 随工作面板一起装，不用另外复制；以前自己复制到 `~/.claude/skills/xiaoli-workflow` 的，装好后把那份删掉，免得两份不一致。
 
 ## 装完第一次会发生什么
 
 在任意项目里打开 Claude Code（有人在终端前的交互式会话）：
 
-1. 工作台先自动让 AI 问你给工作台起什么名字、你主要做哪类工作（前端、后端、Python、测试、产品、其他，决定开工用哪套工作流）。这台机器只自动问一次，不想设直接选默认就行。没绑定 TAPD 的项目会顺带问对应哪个 TAPD 项目。
+1. 工作面板先自动让 AI 问你给工作台起什么名字（默认「小黎」，全称「小黎AI工作台」）、你主要做哪类工作（前端、后端、Python、测试、产品、其他，决定开工用哪套工作流）。这台机器只自动问一次，不想设直接选默认就行。没绑定 TAPD 的项目会顺带问对应哪个 TAPD 项目。
 2. 名字和工种存好后，AI 问要不要花几分钟走一遍演练：先检查本机已经装了哪些 MCP、skill 和命令行工具，缺的问你要不要装；再按你的工作流模拟走一遍、讲讲工作台的功能点。演练不建分支、不提交、不改 TAPD，会多花几轮对话；以后想走输入 `/xiaoxiaoli tour`。
 3. 陪伴猫趴在输入框上方打招呼，默认是 2 行的工作模式，点它展开。
 4. 会话启动约 10 秒后，两个 mod 各自去 GitHub 看一眼有没有新版（见下一节）。
 
 之后的日常用法：
 
-1. 输入 `/xiaoxiaoli show`（或点陪伴猫的「干活」）打开工作台面板。
+1. 输入 `/xiaoxiaoli show`（或点陪伴猫的「干活」）打开工作面板。
 2. 项目还没绑定 TAPD 时，待办区列出你参与的 TAPD 项目：点一行，再点「[ 绑定 <项目名> ]」；也可以直接对 AI 说「这个项目对应 TAPD 的某某项目」。
-3. 待办出来后点一条，再点「[ 开工 <ID> ]」：AI 按你工种的工作流与 xiaoli-workflow 的通用规则走，面板下半显示进度。手上已有没做完的需求时，面板给出新会话的启动命令，到新终端粘贴运行。
-4. 想重新绑定：`/xiaoxiaoli unbind`，面板回到项目列表。
+3. 待办出来后点一条，再点「[ 开工 <ID> ]」：AI 按你工种的工作流与 xiaoli-workflow 的通用规则走，工作面板下半显示进度。手上已有没做完的需求时，工作面板给出新会话的启动命令，到新终端粘贴运行。
+4. 想重新绑定：`/xiaoxiaoli unbind`，工作面板回到项目列表。
 
 ## 自动更新
 
@@ -68,7 +68,7 @@ claude plugin install xiaoke@xiaoli-mods
 
 ## 不用 Claude Code 的人怎么用 skill
 
-skill 是一份 Markdown，Codex 等别的 AI 工具也能用：把 `mods/xiaoxiaoli/skills/xiaoli-workflow` 整个目录复制到那个工具的 skills 目录，比如 Codex 放到 `~/.agents/skills/xiaoli-workflow`。里面提到的 `mcp__xiaoxiaoli__*` 工具只有装了工作台才有，没有时按正文的通用规则走即可。
+skill 是一份 Markdown，Codex 等别的 AI 工具也能用：把 `mods/xiaoxiaoli/skills/xiaoli-workflow` 整个目录复制到那个工具的 skills 目录，比如 Codex 放到 `~/.agents/skills/xiaoli-workflow`。里面提到的 `mcp__xiaoxiaoli__*` 工具只有装了工作面板才有，没有时按正文的通用规则走即可。
 
 ## 开发者本地加载
 
@@ -109,7 +109,7 @@ CLAUDE_CODE_PLUGIN_DIRS=<仓库>\mods\xiaoke;<仓库>\mods\xiaoxiaoli
 
 ## 不同工种怎么调整流程
 
-面板和进度是通用的，流程按工种分：工作台内置前端、后端、Python、测试、产品、其他六套工作流（`mods/xiaoxiaoli/workflows/*.json`），测试、产品、其他开工不建分支。
+工作面板和进度是通用的，流程按工种分：工作面板内置前端、后端、Python、测试、产品、其他六套工作流（`mods/xiaoxiaoli/workflows/*.json`），测试、产品、其他开工不建分支。
 
 - 换工种：`/xiaoxiaoli role <工种>`，或对 AI 说「我是做后端的」。
 - 调整步骤：直接对 AI 说，比如「这个项目去掉写文档这一步」「以后我的流程都加一步代码评审」。AI 用 `mcp__xiaoxiaoli__workflow` 改，存在 `~/.claude/xiaoxiaoli` 下（只对本项目，或对你所有项目），不往项目仓库里写文件；进行中的条目按开工时的步骤走，不受影响。
