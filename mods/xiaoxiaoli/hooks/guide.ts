@@ -276,7 +276,7 @@ export const tourScript = ({ tour, deps, roleTitle, workflowLabel, stepList, sha
     const data = dataDir === '' ? '本项目是项目内模式，只属于本项目的按项目内文档约定的位置记' : `只属于本项目的记进项目资料目录 ${dataDir}`
     const headList = [
         '演练脚本：照着走，一次一个环节，每个环节说完、验证完再往下。',
-        `演示条目：ID ${DEMO_ID}，面板进行中区的「${DEMO_TITLE}」，已记到本会话。进入一个环节时调 ${PROGRESS_TOOL_NAME}（id 传 ${DEMO_ID}，step 传步骤键，status 传 doing），` +
+        `演示条目：ID ${DEMO_ID}，工作面板进行中区的「${DEMO_TITLE}」，已记到本会话。进入一个环节时调 ${PROGRESS_TOOL_NAME}（id 传 ${DEMO_ID}，step 传步骤键，status 传 doing），` +
             `最后一个环节（${lastKey}）做完传 status=done（工具还没加载时先用 ToolSearch 查 select:${PROGRESS_TOOL_NAME}）。`,
         `演练工具就是 ${GUIDE_TOOL_NAME}：体检做完传 action=check 与 results（键为依赖清单里的 id，值为 ok、missing 或 skipped）；收尾传 action=finish，可带 summary（一两句小结）。`,
         `资料目录（resources.md 记地址、命令等，secrets.env 记账号）：${shared}；${data}；两处都有的以项目的为准。`,

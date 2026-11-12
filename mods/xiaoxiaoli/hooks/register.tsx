@@ -1,5 +1,5 @@
 /**
- * @description 小小黎 AI 工作台入口：侧栏面板、环境变量开关、TAPD 待办与迭代筛选、开工分流与启动命令、进行中需求、
+ * @description AI 工作台的工作面板入口（插件 xiaoxiaoli）：工作面板、环境变量开关、TAPD 待办与迭代筛选、开工分流与启动命令、进行中需求、
  * 状态行、/xiaoxiaoli 命令，主会话推进进度用的 mcp__xiaoxiaoli__progress；项目里没有 config.json 时落到全局目录，
  * 没绑定 TAPD 的项目在面板上点选或经 mcp__xiaoxiaoli__bind 绑定一次；工作台可以起名（全局档案 profile.json），
  * 还没起名时面板最上方出首次引导，经 /xiaoxiaoli setup 或 mcp__xiaoxiaoli__setup 保存，/xiaoxiaoli name 直接改名；
@@ -216,7 +216,7 @@ const PROGRESS_POLL_MS = 2000
 const RETRY_DELAYS = [5_000, 15_000, 30_000]
 /* 以下提示都不带前缀，出口统一经 say 加「<名字>：」 */
 const USAGE_TEXT = [
-    '用法 /xiaoxiaoli show 打开侧栏 · hide 收起 · refresh 重读配置并刷新待办 · unbind 解除本项目的全局 TAPD 绑定',
+    '用法 /xiaoxiaoli show 打开工作面板 · hide 收起 · refresh 重读配置并刷新待办 · unbind 解除本项目的全局 TAPD 绑定',
     ' · setup 让 AI 引导给工作台起名（没绑定 TAPD 的项目顺带问绑定） · name <名字> 直接改名',
     ` · role <工种> 设工种（${ROLE_CHOICES_TEXT}）`,
     ' · project 看本项目的配置概况（显示名、TAPD、用到的系统、资料目录）',
@@ -224,14 +224,14 @@ const USAGE_TEXT = [
 ].join('')
 /** 本项目记着不用 TAPD（systems.tapd 为 false）时 refresh 的说法 */
 const TAPD_OFF_REPLY = '本项目记着不用 TAPD（systems.tapd 为 false），不列 TAPD 项目、不拉待办，进行中区照常；要用时对 AI 说「这个项目用 TAPD」'
-const NOT_BOUND_TEXT = '本项目还没绑定 TAPD 项目，在面板里点一个绑定，或对 AI 说「这个项目对应 TAPD 的某某项目」'
+const NOT_BOUND_TEXT = '本项目还没绑定 TAPD 项目，在工作面板里点一个绑定，或对 AI 说「这个项目对应 TAPD 的某某项目」'
 /** 终端不够宽、面板没画出来时的提示：自动打开（轮询、小克代跑）时建议手动运行 show；用户自己运行 show 时只说拉宽终端 */
-const PANE_WAIT_TEXT = '终端不够宽，侧栏先挂起；/xiaoxiaoli show 可直接打开'
-const PANE_WAIT_ASKED_TEXT = '终端不够宽，侧栏没能画出来，把终端拉宽后再试'
+const PANE_WAIT_TEXT = '终端不够宽，工作面板先挂起；/xiaoxiaoli show 可直接打开'
+const PANE_WAIT_ASKED_TEXT = '终端不够宽，工作面板没能画出来，把终端拉宽后再试'
 /** 还没起名、这次没自动发起设置引导时，会话启动弹一次的提示 */
-const SETUP_HINT_TEXT = '第一次用，打开面板点「开始设置」给工作台起名，或输入 /xiaoxiaoli setup；不设也能照常用'
+const SETUP_HINT_TEXT = '第一次用，打开工作面板点「开始设置」给工作台起名，或输入 /xiaoxiaoli setup；不设也能照常用'
 /** 首次使用自动发起了设置引导时的提示 */
-const SETUP_AUTO_TEXT = '第一次用，正在帮你设置工作台名字；不想设直接选「保持默认」，以后可点面板上的「开始设置」或输入 /xiaoxiaoli setup'
+const SETUP_AUTO_TEXT = '第一次用，正在帮你设置工作台名字；不想设直接选「保持默认」，以后可点工作面板上的「开始设置」或输入 /xiaoxiaoli setup'
 /**
  * 首次使用自动发起设置引导前等多久：session.start 里不发（会话的启动在等这个钩子），等工具注册完、界面起来、
  * 用户还没开口时再看一眼；这期间用户先开始提问了就不发
@@ -240,11 +240,11 @@ const AUTO_GUIDE_DELAY_MS = 3000
 /** 取不到全局根目录时起名入口的说法：沿用绑定那句，再说明名字存不了 */
 const NO_PROFILE_TEXT = `${NO_GLOBAL_ROOT_TEXT}，起的名字存不了，先用默认名「${DEFAULT_NAME}」`
 const SETUP_DESCRIPTION = [
-    '小小黎工作台：给工作台起名或改名、设工种，写进全局档案（~/.claude/xiaoxiaoli/profile.json），不分项目，所有项目共用。',
-    '名字：面板标题、提示前缀与 TAPD 评论署名随之换成「名字+AI工作台」。工种：没有自定义工作流时开工用哪套内置工作流，测试、产品、其他开工不建分支。',
+    'AI 工作台：给工作台起名或改名、设工种，写进全局档案（~/.claude/xiaoxiaoli/profile.json），不分项目，所有项目共用。',
+    '名字：工作面板的标题栏、提示前缀与 TAPD 评论署名随之换成「名字+AI工作台」。工种：没有自定义工作流时开工用哪套内置工作流，测试、产品、其他开工不建分支。',
     '用户说「给工作台改名」「工作台叫某某」「我是做后端的」，或按 /xiaoxiaoli setup 发来的设置引导问到名字与工种时调用。',
     'name 与 role 至少给一个。name 只填名字本身，如「小美」（全称就是「小美AI工作台」），带了「AI工作台」「工作台」后缀会自动去掉；',
-    '1 到 12 个字符，不能含换行、制表等控制字符与 < > & " \' 这五个字符；想恢复默认就传「小小黎」。',
+    `1 到 12 个字符，不能含换行、制表等控制字符与 < > & " ' 这五个字符；想恢复默认就传「${DEFAULT_NAME}」。`,
     'role 取 frontend 前端、backend 后端、python、test 测试、product 产品、other 其他。'
 ].join('')
 const SETUP_SCHEMA = {
@@ -256,7 +256,7 @@ const SETUP_SCHEMA = {
     required: []
 }
 const WORKFLOW_DESCRIPTION = [
-    '小小黎工作台：查看与调整当前项目开工用的工作流（步骤、每步细则、要先问用户的地方）。查找顺序：项目自定义',
+    'AI 工作台：查看与调整当前项目开工用的工作流（步骤、每步细则、要先问用户的地方）。查找顺序：项目自定义',
     '（~/.claude/xiaoxiaoli/projects/<项目键>/workflow.json）→ 个人自定义（~/.claude/xiaoxiaoli/workflow.json）→ 内置（按用户的工种：前端、后端、Python、测试、产品、其他）。',
     'action=get：开工消息要求取工作流时调，kind 传 story（需求与任务）或 bug（缺陷）只取那一组；返回来源说明与定义 JSON，',
     '照它的步骤与 what、tools、output、ask（要不要先问）、rules 走，进度上报（mcp__xiaoxiaoli__progress）用它的步骤键。',
@@ -267,18 +267,18 @@ const WORKFLOW_DESCRIPTION = [
     'slow=true 的步骤可挂子项（TAPD 任务、模块）；branch=false 时开工不建分支。'
 ].join('')
 const PROJECT_DESCRIPTION = [
-    '小小黎工作台：查看与修改当前项目的配置差异，存在全局项目目录的 config.json（~/.claude/xiaoxiaoli/projects/<项目键>/config.json），不往项目仓库写文件。',
+    'AI 工作台：查看与修改当前项目的配置差异，存在全局项目目录的 config.json（~/.claude/xiaoxiaoli/projects/<项目键>/config.json），不往项目仓库写文件。',
     '用户说「这个项目显示成某某」「这个项目不用 TAPD」「这个项目用语雀 / 不用 figma」，或你需要了解本项目配置概况时调用。',
     'action=get：一次返回显示名与目录名、绑定的 TAPD 项目、systems、通用资料目录（~/.claude/xiaoxiaoli/shared）与项目资料目录的位置、',
     '两处 resources.md 与 secrets.env 在不在（不读内容）、生效工作流的来源、工作台名字与工种。',
-    'action=set：displayName 改面板上显示的项目名（1 到 20 个字符，传空字符串清掉、回到目录名）；systems 与已有的合并，值 true 用、false 不用、null 去掉（回到没说，按用到处理），',
-    `约定的键 ${SYSTEM_KEYS.join('、')}，别的键也照存。只有 tapd=false 会让面板不列 TAPD 项目、不拉待办（之后绑定 TAPD 项目时自动改回 true）；`,
+    'action=set：displayName 改工作面板上显示的项目名（1 到 20 个字符，传空字符串清掉、回到目录名）；systems 与已有的合并，值 true 用、false 不用、null 去掉（回到没说，按用到处理），',
+    `约定的键 ${SYSTEM_KEYS.join('、')}，别的键也照存。只有 tapd=false 会让工作面板不列 TAPD 项目、不拉待办（之后绑定 TAPD 项目时自动改回 true）；`,
     '其余键本 mod 不解释，供你判断哪些环节跳过（如 yuque=false 时不读语雀）。各项目通用的资料（resources.md、secrets.env）放通用资料目录，和通用不一样的放项目资料目录。',
     '项目内模式（项目里有 docs/xiaoli/local/workbench/config.json）不支持 set。'
 ].join('')
 const GUIDE_DESCRIPTION = [
-    '小小黎工作台：体检与演练。只有用户要走一遍演练时才调 start：设置引导里问过并同意、点了面板上的「走一遍演练」、输入 /xiaoxiaoli tour，',
-    '或说「带我走一遍」「带我熟悉一下工作台」；别的时候不要调。start 在面板进行中区放一条演示条目（ID demo，标题「【演练】熟悉工作台」，',
+    'AI 工作台：体检与演练。只有用户要走一遍演练时才调 start：设置引导里问过并同意、点了工作面板上的「走一遍演练」、输入 /xiaoxiaoli tour，',
+    '或说「带我走一遍」「带我熟悉一下工作台」；别的时候不要调。start 在工作面板进行中区放一条演示条目（ID demo，标题「【演练】熟悉工作台」，',
     '步骤取当前生效工作流的需求步骤，记到本会话，已有的会重置），返回完整的演练脚本（总规则、体检与本工种的依赖清单、按工作流逐环节的走法、',
     '功能点、收尾、本项目概况），照它走；演示条目的进度用 mcp__xiaoxiaoli__progress 推进，id 传 demo。',
     '体检做完调 check：results 的键是依赖清单里的 id，值 ok（有）、missing（缺）或 skipped（用户选以后再配），记进全局根目录的 env.json',
@@ -298,7 +298,7 @@ const PROJECT_SCHEMA = {
     type: 'object',
     properties: {
         action: { type: 'string', enum: ['get', 'set'] },
-        displayName: { type: 'string', description: 'set 时可选：面板上显示的项目名，传空字符串清掉' },
+        displayName: { type: 'string', description: 'set 时可选：工作面板上显示的项目名，传空字符串清掉' },
         systems: { type: 'object', description: 'set 时可选：如 { "tapd": false, "yuque": true }，值 null 去掉该键' }
     },
     required: ['action']
@@ -317,8 +317,8 @@ const WORKFLOW_SCHEMA = {
     required: ['action']
 }
 const BIND_DESCRIPTION = [
-    '小小黎工作台：把当前项目绑定到一个 TAPD 项目，写进全局项目配置（~/.claude/xiaoxiaoli/projects/<项目键>/config.json），',
-    '之后侧栏面板拉这个 TAPD 项目的待办，再打开本项目不再询问。',
+    'AI 工作台：把当前项目绑定到一个 TAPD 项目，写进全局项目配置（~/.claude/xiaoxiaoli/projects/<项目键>/config.json），',
+    '之后工作面板拉这个 TAPD 项目的待办，再打开本项目不再询问。',
     '用户说「这个项目对应 TAPD 的某某项目」「把本项目绑到 TAPD 某某」时调用。',
     'project 填 TAPD 项目名或项目 ID（workspace_id，纯数字），按用户参与的项目匹配：名字完全一致优先，否则按包含；',
     '对上多个时会列出候选，让用户挑一个再调。可选 branchTemplate、bugBranchTemplate（要含 {id}，如 feat/{id}）与 branchBase（新分支起点，默认 origin/master）。',
@@ -336,12 +336,12 @@ const BIND_SCHEMA = {
     required: ['project']
 }
 const PROGRESS_DESCRIPTION = [
-    '小小黎工作台：推进当前项目 state.json 里一条需求的进度，侧栏面板据此显示「步骤 → 任务 → 模块」三级进度。',
+    'AI 工作台：推进当前项目 state.json 里一条需求的进度，工作面板据此显示「步骤 → 任务 → 模块」三级进度。',
     '每推进一步、换当前子项、派子代理时调用一次。',
     'step 取这个条目自己的步骤键：键取自工作流（开工时 mcp__xiaoxiaoli__workflow 的 get 返回的 key；需求 kind=story，缺陷 kind=bug），',
-    '面板开工的条目按当时生效的工作流建步骤；不属于这个条目的键会被拒绝并列出可用的键。旧的前端条目为需求 ①–⑪（fetch、sort、branch、read、align、',
+    '在工作面板开工的条目按当时生效的工作流建步骤；不属于这个条目的键会被拒绝并列出可用的键。旧的前端条目为需求 ①–⑪（fetch、sort、branch、read、align、',
     'develop、unit、selftest、docs、tapd、release）与缺陷 6 步（screenshot、env、reproduce、diagnose、fix、verify）。新建条目也按当前生效的工作流。',
-    '结论要用户确认的步（如判定拒绝）传 confirm=true，面板标「待确认」，用户确认后传 confirm=false。',
+    '结论要用户确认的步（如判定拒绝）传 confirm=true，工作面板标「待确认」，用户确认后传 confirm=false。',
     'status=doing 与 status=done 都是线性推进：它之前的步骤全记为完成；doing 时它之后的回到未开始（返工），done 时它本身记完成、detail 保留、之后的不动；',
     'status=todo 只改这一步。直接把最后一步传 done 即可把整条记完成，不必先传 doing。detail 写当前子项，如「界面2 顶栏」「联调 /design-records/create」。',
     '慢环节（工作流里 slow=true 的步骤）可用 taskId、taskTitle、taskStatus、taskDetail 挂 TAPD 任务或自定义阶段（如「自测」），',
@@ -360,7 +360,7 @@ const PROGRESS_SCHEMA = {
         step: { type: 'string', description: '步骤键，取这个条目自己的（键取自工作流）' },
         status: { type: 'string', enum: [...STEP_STATUSES] },
         detail: { type: 'string', description: '这一步的当前子项；传空串清掉' },
-        confirm: { type: 'boolean', description: 'true：这一步的结论要用户确认，面板标「待确认」；false 清掉' },
+        confirm: { type: 'boolean', description: 'true：这一步的结论要用户确认，工作面板标「待确认」；false 清掉' },
         taskId: { type: 'string', description: 'TAPD 任务短 ID（纯数字）或自定义阶段名（如「自测」），只能挂在这个条目的慢环节下，要同时给 step' },
         taskTitle: { type: 'string', description: '任务标题；新挂 TAPD 任务时必填，自定义阶段省略时用 taskId' },
         taskStatus: { type: 'string', enum: [...STEP_STATUSES] },
@@ -526,7 +526,7 @@ const applyProfile = async ($: Dollar, next: ProfileStateType): Promise<void> =>
         try {
             await $.ui.open({ id: PANE_ID, title: fullNameOf(nameOf(next)) })
         } catch (cause) {
-            $.ui.log(`换面板标题失败：${describeError(cause)}`, { to: 'debug' })
+            $.ui.log(`换工作面板标题失败：${describeError(cause)}`, { to: 'debug' })
         }
     }
     await showStatus($, (await read($, progress)).taskList)
@@ -980,7 +980,7 @@ const writeTasks = async ($: Dollar, place: WorkplaceType, taskList: readonly Pr
     try {
         await showProgress($, text)
     } catch (cause) {
-        $.ui.log(`进度已写入，刷新面板失败：${describeError(cause)}`, { to: 'debug' })
+        $.ui.log(`进度已写入，刷新工作面板失败：${describeError(cause)}`, { to: 'debug' })
     }
 
     return ''
@@ -1306,7 +1306,7 @@ const runProgressTool = async ($: Dollar, raw: Record<string, unknown>): Promise
     try {
         await showProgress($, text)
     } catch (cause) {
-        $.ui.log(`进度已写入，刷新面板失败：${describeError(cause)}`, { to: 'debug' })
+        $.ui.log(`进度已写入，刷新工作面板失败：${describeError(cause)}`, { to: 'debug' })
     }
 
     return { result: `${result.text}（已写入 ${place.statePath}）` }
@@ -1411,7 +1411,7 @@ const runBindTool = async ($: Dollar, raw: Record<string, unknown>): Promise<{ r
     const result = await bindProject($, project, branch)
     if ('reason' in result) return { deny: await say($, `${result.reason}，没有写入`) }
 
-    return { result: `${result.text}；面板马上刷新待办` }
+    return { result: `${result.text}；工作面板马上刷新待办` }
 }
 
 /**
@@ -1440,7 +1440,7 @@ const unbindProject = async ($: Dollar): Promise<string> => {
     await update($, todoMeta, i => ({ ...i, refreshedAt: 0, error: '' }))
     await refreshNow($)
 
-    return say($, `已解除本项目（${place.name}）与 TAPD 项目「${current.projectName}」的绑定；进行中区与 state.json 不动，面板重新列出 TAPD 项目供绑定`)
+    return say($, `已解除本项目（${place.name}）与 TAPD 项目「${current.projectName}」的绑定；进行中区与 state.json 不动，工作面板重新列出 TAPD 项目供绑定`)
 }
 
 /** 工种不对时的说法 */
@@ -1485,7 +1485,7 @@ const runSetupTool = async ($: Dollar, raw: Record<string, unknown>): Promise<{ 
         ...(checked === undefined ? [] : [`工作台现在叫 ${fullNameOf(checked.name)}`]),
         ...(role === undefined ? [] : [roleEffectText(role, await loadWorkflow($))])
     ]
-    const nameNote = checked === undefined ? '' : '；面板标题、提示前缀与 TAPD 评论署名已换成新名字'
+    const nameNote = checked === undefined ? '' : '；工作面板标题栏、提示前缀与 TAPD 评论署名已换成新名字'
     return { result: `${partList.join('；')}（已写入 ${saved.path}${nameNote}）` }
 }
 
@@ -1658,7 +1658,7 @@ const skipTour = async ($: Dollar): Promise<void> => {
     if (!isTourOffered(await loadProfile($))) return
 
     const saved = await saveProfile($, { tour: 'declined', tourAt: new Date(await $.clock.now()).toISOString() })
-    $.ui.toast(await say($, 'reason' in saved ? `没记下「不用了」，${saved.reason}` : '好的，不走演练，面板上不再提示；以后想走输入 /xiaoxiaoli tour'))
+    $.ui.toast(await say($, 'reason' in saved ? `没记下「不用了」，${saved.reason}` : '好的，不走演练，工作面板上不再提示；以后想走输入 /xiaoxiaoli tour'))
 }
 
 /**
@@ -2015,7 +2015,7 @@ const runGuideFinish = async ($: Dollar, summary?: string): Promise<{ result: st
             : await saveProfile($, { tour: 'done', tourAt, ...(summary === undefined ? {} : { summary }) })
     const isLong = summary !== undefined && [...summary.trim()].length > TOUR_SUMMARY_LIMIT
     if ('reason' in saved) failList.push(`演练走过没记下：${saved.reason}`)
-    else doneList.push(`已记下演练走过${summary?.trim() ? '与小结' : ''}（写入 ${saved.path}${isLong ? `；小结超过 ${TOUR_SUMMARY_LIMIT} 个字符，只存了前 ${TOUR_SUMMARY_LIMIT} 个` : ''}），面板上不再出演练引导`)
+    else doneList.push(`已记下演练走过${summary?.trim() ? '与小结' : ''}（写入 ${saved.path}${isLong ? `；小结超过 ${TOUR_SUMMARY_LIMIT} 个字符，只存了前 ${TOUR_SUMMARY_LIMIT} 个` : ''}），工作面板上不再出演练引导`)
     if (!doneList.length) return { deny: await say($, `${failList.join('；')}，没有写入`) }
 
     return { result: [...doneList, ...failList].join('；') }
@@ -2078,9 +2078,9 @@ const runProjectTool = async ($: Dollar, raw: Record<string, unknown>): Promise<
     }
     const name = next?.displayName ? `显示名「${next.displayName}」` : `显示名没设（用目录名 ${place.name}）`
     const tapdNote = isOff
-        ? `；本项目不用 TAPD，面板不列 TAPD 项目、不拉待办${current === null ? '' : `（还绑着「${current.projectName}」，绑定没动）`}`
+        ? `；本项目不用 TAPD，工作面板不列 TAPD 项目、不拉待办${current === null ? '' : `（还绑着「${current.projectName}」，绑定没动）`}`
         : wasTapdOff
-          ? '；面板恢复拉 TAPD'
+          ? '；工作面板恢复拉 TAPD'
           : ''
     return { result: `已更新本项目配置（${place.configPath}）：${name}；用到的系统：${systemsText(next?.systems ?? {})}${tapdNote}` }
 }
@@ -2109,7 +2109,7 @@ const refreshReply = async ($: Dollar): Promise<string> => {
     }
 
     const meta = await read($, todoMeta)
-    if (meta.retryCount) return say($, `这次没拉到待办（多半是 TAPD 还没连上），正在自动重试（第 ${meta.retryCount} 次），稍后看面板${tail}`)
+    if (meta.retryCount) return say($, `这次没拉到待办（多半是 TAPD 还没连上），正在自动重试（第 ${meta.retryCount} 次），稍后看工作面板${tail}`)
     if (meta.error) return say($, `${meta.error}${tail}`)
 
     const shownList = filterByIteration(await read($, todoList), iterationFilterId(await read($, iteration), meta.scope))
@@ -2130,7 +2130,7 @@ const runCommand = async ($: Dollar, arg: string, isAsked: boolean): Promise<str
     if (want !== undefined) {
         await setPaneEnv($, want)
         await applyPane($, want, isAsked)
-        return say($, want === 'show' ? '侧栏已打开' : '侧栏已收起，/xiaoxiaoli show 或陪伴猫小克的「干活」再打开')
+        return say($, want === 'show' ? '工作面板已打开' : '工作面板已收起，/xiaoxiaoli show 或陪伴猫小克的「干活」再打开')
     }
     /* 第一个词是子命令，其余原样作参数（名字里可以有空格） */
     const sub = arg.split(/\s+/, 1)[0] ?? ''
@@ -2158,7 +2158,7 @@ const MOD_NAME = 'xiaoxiaoli'
  */
 const updatePortsOf = async ($: Dollar): Promise<UpdatePortsType> => ({
     mod: MOD_NAME,
-    subject: '工作台',
+    subject: '工作面板',
     root: $.plugin.root,
     today: todayText(await $.clock.now()),
     readCheckedDay: () => $.store.get(CHECKED_DAY_KEY),
@@ -2241,7 +2241,7 @@ export const register: Register = on => {
         await $.command.register({
             name: 'xiaoxiaoli',
             description:
-                '小小黎 AI 工作台：show 打开侧栏，hide 收起，refresh 重读配置并刷新待办，unbind 解除本项目的全局 TAPD 绑定，setup 让 AI 引导给工作台起名，name <名字> 直接改名，role <工种> 设工种，project 看本项目的配置概况，tour 走一遍演练',
+                'AI 工作台：show 打开工作面板，hide 收起，refresh 重读配置并刷新待办，unbind 解除本项目的全局 TAPD 绑定，setup 让 AI 引导给工作台起名，name <名字> 直接改名，role <工种> 设工种，project 看本项目的配置概况，tour 走一遍演练',
             argumentHint: '[show|hide|refresh|unbind|setup|name <名字>|role <工种>|project|tour]'
         })
         const stored = await $.store.get('scope')
@@ -2374,7 +2374,7 @@ export const register: Register = on => {
         return e.origin.kind === 'plugin' ? {} : { text }
     })
 
-    /* 用户手动关掉侧栏：开关同步成 hide，之后小克的「干活」才能再打开 */
+    /* 用户手动关掉工作面板：开关同步成 hide，之后小克的「干活」才能再打开 */
     on('ui.close', async ($, e, next) => {
         const result = await next(e)
         if (e.id !== PANE_ID || e.origin.kind !== 'person') return result

@@ -1,5 +1,5 @@
 /**
- * @description 小小黎的测试：排序、级联、迭代筛选、截断与排版、整行命中、state.json 新旧结构、步骤三级树状渲染、按会话折叠、
+ * @description 工作面板（插件 xiaoxiaoli）的测试：排序、级联、迭代筛选、截断与排版、整行命中、state.json 新旧结构、步骤三级树状渲染、按会话折叠、
  * 多项目隔离、开工分流与启动命令、缺陷 6 步、进度工具、环境变量开关、TAPD 白名单，以及全局模式的查找顺序、绑定与解绑、开工消息，
  * 沉浸模式，以及 0.4.1 的缺陷修复（挂子项不回退、迭代失败如实提示、refresh 回复、写入失败提示、命令值校验、旧条目归属），
  * 0.4.2 的跨项目开工与项目 ID 对应、重新开工规则、bash/zsh 启动命令、取不到用户目录的文案，
@@ -246,7 +246,7 @@ const OTHER_SESSION = '00000000-0000-4000-8000-000000000002'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const PROGRESS_TOOL = 'mcp__xiaoxiaoli__progress'
 const PANE_PROPS = {
-    title: '小小黎AI工作台',
+    title: '小黎AI工作台',
     isFocused: false,
     bodyColumns: 60,
     placement: 'dock' as const,
@@ -484,7 +484,7 @@ interface WorldType {
  */
 const SKIPPED_PROFILE = JSON.stringify({ version: 1, skipped: true, tour: 'done' })
 
-/** 真的开一个会话：小小黎碰到的外部名词都接住，并记下它做了什么 */
+/** 真的开一个会话：工作面板碰到的外部名词都接住，并记下它做了什么 */
 const boot = async ($: Engine, on: On, world: WorldType = {}) => {
     const cwd = world.cwd ?? CWD
     const files: Record<string, string> = world.files ?? { [CONFIG_FILE]: JSON.stringify(CONFIG) }
@@ -812,7 +812,7 @@ describe('截断与排版', () => {
         expect(wide[0]?.action).toBeUndefined()
         const header = lineText(wide[HEADER_ROW] as BoardLineType)
         expect(header.startsWith(`${BOARD_TITLE_SPACED} · 演示项目`)).toBe(true)
-        expect(BOARD_TITLE_SPACED).toBe('小 小 黎 A I 工 作 台')
+        expect(BOARD_TITLE_SPACED).toBe('小 黎 A I 工 作 台')
         expect(header).toMatch(/\[ 刷新 \] 刷新于 \d{2}:\d{2}$/)
         expect(displayWidth(header)).toBe(78)
         expect(wide[HEADER_ROW]?.segList[1]).toEqual({ text: BOARD_TITLE_SPACED, color: 'suggestion', bold: true })
@@ -973,7 +973,7 @@ describe('state.json 新旧结构', () => {
         expect(parseProgress('{oops').error).toBe('state.json 不是合法 JSON')
         expect(parseProgress('{}').error).toBe('state.json 缺少 tasks 数组')
         expect(parseProgress('{ "tasks": [] }')).toEqual({ taskList: [], error: '' })
-        expect(parseProgress('{ "version": 3, "tasks": [] }').error).toContain('比小小黎新')
+        expect(parseProgress('{ "version": 3, "tasks": [] }').error).toContain('比工作面板认识的新')
     })
 
     test('新结构写回再读回原样：version 2、每步一行、可选字段没有就不写；缺的步骤补成未开始，未知步骤键整条跳过', () => {
@@ -1015,7 +1015,7 @@ describe('步骤渲染：三种状态与三级树状', () => {
         expect(doing.segList.slice(1)).toEqual([{ text: '>  6 开发中-界面2 顶栏', color: 'suggestion', bold: true }])
         expect(lineOf('   7 单测').segList.slice(1)).toEqual([{ text: '   7 单测', dim: true }])
         expect(lineList.some(i => lineText(i) === '需 1046775 商家端-设计器模块')).toBe(true)
-        expect(statusText([task], SESSION_ID, true)).toBe('小小黎 · 1046775 第 6 步 开发中-界面2 顶栏')
+        expect(statusText([task], SESSION_ID, true)).toBe('小黎 · 1046775 第 6 步 开发中-界面2 顶栏')
     })
 
     test('三级：进行中的慢环节往下展开任务、进行中的任务再展开模块，每级往右缩两格、├─ └─ 连接；快环节只一行', () => {
@@ -1032,7 +1032,7 @@ describe('步骤渲染：三种状态与三级树状', () => {
         ])
         expect(texts[at + 6]).toBe('     └─演示-任务三 联调')
         expect(texts[at + 7]).toBe('   7 单测')
-        expect(statusText([task], SESSION_ID, true)).toBe('小小黎 · 9990001 第 6 步 开发中 · 子项 2/3 · 界面2 顶栏 3/5')
+        expect(statusText([task], SESSION_ID, true)).toBe('小黎 · 9990001 第 6 步 开发中 · 子项 2/3 · 界面2 顶栏 3/5')
         expect(stepLabel(task.steps[5] as ProgressTaskType['steps'][number])).toBe('开发中 · 子项 2/3 · 界面2 顶栏 3/5')
         /* 0.6.0 起慢环节按条目自己的步骤判断，参数校验不再知道条目，改在 applyProgress 里按条目核；旧条目的说法不变 */
         const fastInput = toProgressInput({ id: '9990001', step: 'tapd', taskId: '9990011', taskTitle: '不该挂' })
@@ -1072,7 +1072,7 @@ describe('真实需求与演示需求同时在 state.json', () => {
         expect(folded[0]?.startsWith('需 9990001 演示-商家端-示例模块 · 开发 · 子项 2/3 · 界面')).toBe(true)
         expect(texts.filter(i => /^(>| ) {1,2}\d+ /.test(i))).toHaveLength(11)
         expect(texts).toContain('需 9990002 演示-已完成需求【已完成】')
-        expect(seen.statuses.at(-1)).toBe('小小黎 · 1046775 第 7 步 单测中-上线后待修 4 条子代理进行中')
+        expect(seen.statuses.at(-1)).toBe('小黎 · 1046775 第 7 步 单测中-上线后待修 4 条子代理进行中')
         await ui.unmount()
     })
 })
@@ -1088,7 +1088,7 @@ describe('多项目隔离', () => {
             presentation: { isFullscreen: true, columns: 160 }
         })
         /* 0.4.2：项目里没有 config.json、只因取不到用户目录落不了全局，refresh 与待办区如实说明，不再说「没配 TAPD」 */
-        expect(result.text).toBe(`小小黎：${NO_GLOBAL_ROOT_TEXT}，只显示进行中需求`)
+        expect(result.text).toBe(`小黎：${NO_GLOBAL_ROOT_TEXT}，只显示进行中需求`)
         const ui = await mountPane($)
         const texts = await textsOf(ui)
         expect(texts[1]?.startsWith(`${BOARD_TITLE_SPACED} · other`)).toBe(true)
@@ -1181,8 +1181,8 @@ describe('开工分流与启动命令', () => {
         /* 0.7.0 起开工提示在前、--add-dir 在后（理由见上一条） */
         expect(command).toContain(`-n '1000102' '开工 ${STORY_B}（`)
         expect(command.endsWith(`--add-dir 'D:/work/demo/docs/xiaoli' }`)).toBe(true)
-        expect(seen.logs.some(i => i.startsWith('小小黎 1000102 启动命令（到新的 PowerShell 窗口粘贴运行）：if (-not'))).toBe(true)
-        expect(seen.toasts).toContain('小小黎：1000102 的启动命令已复制，到新的 PowerShell 窗口粘贴运行')
+        expect(seen.logs.some(i => i.startsWith('小黎 1000102 启动命令（到新的 PowerShell 窗口粘贴运行）：if (-not'))).toBe(true)
+        expect(seen.toasts).toContain('小黎：1000102 的启动命令已复制，到新的 PowerShell 窗口粘贴运行')
         const task = parseProgress(files[STATE_FILE] ?? '').taskList.find(i => i.id === '1000102') as ProgressTaskType
         expect(task.sessionId).toMatch(UUID_PATTERN)
         expect(command).toContain(`claude --session-id ${task.sessionId} -n '1000102'`)
@@ -1212,7 +1212,7 @@ describe('开工分流与启动命令', () => {
         await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
         await startFromPane(ui, STORY_A)
         expect(seen.submitted).toEqual([{ text: `开工 ${STORY_A}`, asUser: true }])
-        expect(seen.toasts).toContain(`小小黎：已发出：开工 ${STORY_A}`)
+        expect(seen.toasts).toContain(`小黎：已发出：开工 ${STORY_A}`)
         const task = parseProgress(files[STATE_FILE] ?? '').taskList.find(i => i.id === '1000101') as ProgressTaskType
         expect(task.sessionId).toBe(SESSION_ID)
         expect(task.steps[2]).toEqual({ key: 'branch', title: '建分支', status: 'doing', detail: '本会话开工' })
@@ -1319,13 +1319,13 @@ describe('进度工具 mcp__xiaoxiaoli__progress', () => {
     test('不能写时说清原因并注明没有写入：参数不对、步骤不属于这种条目、新建缺标题、状态文件读不懂', async ($, on) => {
         const files = { [CONFIG_FILE]: JSON.stringify(CONFIG), [STATE_FILE]: legacyState() }
         const { seen } = await boot($, on, { files })
-        expect((await callProgress($, { id: '1046775', status: 'done' })).deny).toBe('小小黎：参数不对，给了 status 就要给 step，没有写入')
+        expect((await callProgress($, { id: '1046775', status: 'done' })).deny).toBe('小黎：参数不对，给了 status 就要给 step，没有写入')
         expect((await callProgress($, { id: '1046775', step: 'fix', status: 'doing' })).deny).toBe(
-            '小小黎：需求的步骤只有 fetch、sort、branch、read、align、develop、unit、selftest、docs、tapd、release，没有写入'
+            '小黎：需求的步骤只有 fetch、sort、branch、read、align、develop、unit、selftest、docs、tapd、release，没有写入'
         )
-        expect((await callProgress($, { id: '9990009', step: 'read' })).deny).toBe('小小黎：state.json 里没有条目 9990009，新建要带 title，没有写入')
+        expect((await callProgress($, { id: '9990009', step: 'read' })).deny).toBe('小黎：state.json 里没有条目 9990009，新建要带 title，没有写入')
         files[STATE_FILE] = '{oops'
-        expect((await callProgress($, { id: '1046775', step: 'unit', status: 'doing' })).deny).toBe('小小黎：state.json 不是合法 JSON，先修好再写，没有写入')
+        expect((await callProgress($, { id: '1046775', step: 'unit', status: 'doing' })).deny).toBe('小黎：state.json 不是合法 JSON，先修好再写，没有写入')
         expect(seen.written).toEqual([])
     })
 
@@ -1379,7 +1379,7 @@ describe('状态行', () => {
         expect((await linesOf(ui)).some(i => lineText(i) === '暂无进行中任务')).toBe(true)
         files[STATE_FILE] = JSON.stringify({ tasks: [{ id: 'T1', title: '演示需求', step: 4, stepName: '写代码', waiting: 'tapd', updatedAt: '2026-10-21', sessionId: SESSION_ID }] })
         await clock.advance(2000)
-        expect(seen.statuses.at(-1)).toBe('小小黎 · T1 第 4 步 读需求与语雀中-写代码')
+        expect(seen.statuses.at(-1)).toBe('小黎 · T1 第 4 步 读需求与语雀中-写代码')
         expect((await linesOf(ui)).some(i => lineText(i).includes('等你：批准改 TAPD'))).toBe(true)
         files[STATE_FILE] = '{ "tasks": [] }'
         await clock.advance(2000)
@@ -1392,13 +1392,13 @@ describe('状态行', () => {
         const theirs = storyTask('1000103', '丙', 'align', { sessionId: OTHER_SESSION })
         const legacy = storyTask('1000104', '丁', 'read')
         /* worktree 里的会话：旧条目不算本会话的 */
-        expect(statusText([theirs, legacy, mine], SESSION_ID, false)).toBe('小小黎 · 1000101 第 6 步 开发中')
-        expect(statusText([theirs, legacy, mine], OTHER_SESSION, false)).toBe('小小黎 · 1000103 第 5 步 对齐需求中')
+        expect(statusText([theirs, legacy, mine], SESSION_ID, false)).toBe('小黎 · 1000101 第 6 步 开发中')
+        expect(statusText([theirs, legacy, mine], OTHER_SESSION, false)).toBe('小黎 · 1000103 第 5 步 对齐需求中')
         expect(statusText([theirs, legacy], SESSION_ID, false)).toBeUndefined()
         expect(statusText([legacy], SESSION_ID, false)).toBeUndefined()
         /* 主工作区的会话：旧条目算本会话的 */
-        expect(statusText([theirs, legacy], SESSION_ID, true)).toBe('小小黎 · 1000104 第 4 步 读需求与语雀中')
-        expect(statusText([theirs, legacy, mine], SESSION_ID, true)).toBe('小小黎 · 1000104 第 4 步 读需求与语雀中 · 另 1 条')
+        expect(statusText([theirs, legacy], SESSION_ID, true)).toBe('小黎 · 1000104 第 4 步 读需求与语雀中')
+        expect(statusText([theirs, legacy, mine], SESSION_ID, true)).toBe('小黎 · 1000104 第 4 步 读需求与语雀中 · 另 1 条')
         expect(statusText([legacy, mine], '', true)).toBeUndefined()
     })
 
@@ -1408,7 +1408,7 @@ describe('状态行', () => {
         const finished = setStep(storyTask('1000105', '戊', 'release', { sessionId: SESSION_ID }), { key: 'release', status: 'done', updatedAt: UPDATED })
         const theirs = storyTask('1000103', '丙', 'align', { sessionId: OTHER_SESSION })
         const legacy = storyTask('1000104', '丁', 'read')
-        expect(statusText([theirs, first, legacy, finished, second], SESSION_ID, false)).toBe('小小黎 · 1000101 第 6 步 开发中 · 另 1 条')
+        expect(statusText([theirs, first, legacy, finished, second], SESSION_ID, false)).toBe('小黎 · 1000101 第 6 步 开发中 · 另 1 条')
     })
 
     test('配置文件缺字段或类型不对按没配处理，开工命令的可选字段给默认值', () => {
@@ -1489,7 +1489,7 @@ describe('环境变量开关', () => {
         expect(env.value).toBe('show')
         expect(seen.opened).toEqual(['xiaoxiaoli'])
         const byPerson = await $.command.run({ command: 'xiaoxiaoli', args: 'show', origin: { kind: 'composer' }, ...presentation })
-        expect(byPerson.text).toBe('小小黎：侧栏已打开')
+        expect(byPerson.text).toBe('小黎：工作面板已打开')
     })
 })
 
@@ -1516,7 +1516,7 @@ describe('待办与开工', () => {
         expect(lineText((await linesOf(ui))[row + 1] as BoardLineType)).toContain(`开工 ${STORY_A}`)
         await click(ui, 20, row + 1)
         expect(seen.submitted).toEqual([{ text: `开工 ${STORY_A}`, asUser: true }])
-        expect(seen.toasts).toContain(`小小黎：已发出：开工 ${STORY_A}`)
+        expect(seen.toasts).toContain(`小黎：已发出：开工 ${STORY_A}`)
         expect(await rowOf(ui, `start:${STORY_A}`)).toBe(-1)
         await ui.unmount()
     })
@@ -1764,14 +1764,14 @@ describe('全局模式：项目键与全局目录', () => {
         const dataDir = 'C:\\Users\\a\\.claude\\xiaoxiaoli\\projects\\demo-1a2b3c4d'
         const flowStory = '先调 mcp__xiaoxiaoli__workflow 取本项目工作流（kind 传 story），按它的步骤、细则与「先问」走，进度用它的步骤键，其余照技能的通用规则'
         expect(submitText({ longId: STORY_A, dataDir: '' })).toBe(`开工 ${STORY_A}`)
-        /* 0.9.0 起技能随工作台插件安装，名字是 xiaoxiaoli:xiaoli-workflow，两种叫法都写上 */
+        /* 0.9.0 起技能随工作面板插件安装，名字是 xiaoxiaoli:xiaoli-workflow，两种叫法都写上 */
         expect(submitText({ longId: STORY_A, dataDir })).toBe(
-            `开工 ${STORY_A}（按 xiaoli-workflow 技能（随工作台插件安装时名为 xiaoxiaoli:xiaoli-workflow）的流程执行，用 mcp__xiaoxiaoli__progress 推进进度；项目内有 docs/xiaoli/workflow.md 时以项目内文档为准；${flowStory}；项目资料目录 ${dataDir}；TAPD 评论署名 ——小小黎AI工作台）`
+            `开工 ${STORY_A}（按 xiaoli-workflow 技能（随工作面板插件安装时名为 xiaoxiaoli:xiaoli-workflow）的流程执行，用 mcp__xiaoxiaoli__progress 推进进度；项目内有 docs/xiaoli/workflow.md 时以项目内文档为准；${flowStory}；项目资料目录 ${dataDir}；TAPD 评论署名 ——小黎AI工作台）`
         )
         const root = 'D:\\work\\demo'
         const worktree = worktreeOf(root, '1000102')
         const prompt = startPrompt({ longId: STORY_B, worktree, branch: 'feat/1000102', root, dataDir })
-        expect(prompt).toBe(`开工 ${STORY_B}（独立会话：worktree D:\\work\\demo-1000102，分支 feat/1000102；${GLOBAL_GUIDE}；${flowStory}；项目资料目录 ${dataDir}；TAPD 评论署名 ——小小黎AI工作台）`)
+        expect(prompt).toBe(`开工 ${STORY_B}（独立会话：worktree D:\\work\\demo-1000102，分支 feat/1000102；${GLOBAL_GUIDE}；${flowStory}；项目资料目录 ${dataDir}；TAPD 评论署名 ——小黎AI工作台）`)
         const plan = { root, worktree, branch: 'feat/1000102', base: 'origin/master', sessionId: SESSION_ID, id: '1000102', prompt }
         /* 0.7.0 起开工提示在 --add-dir 之前 */
         expect(newSessionCommand({ ...plan, addDir: dataDir })).toContain(`claude --session-id ${SESSION_ID} -n '1000102' '开工 ${STORY_B}（`)
@@ -1843,7 +1843,7 @@ describe('全局模式：查找顺序', () => {
         expect(texts).toContain('需 9990001 演示-商家端-示例模块')
         expect((await linesOf(ui)).filter(i => i.action?.startsWith('bind:')).map(i => i.action)).toEqual([`bind:${WS}`, `bind:${WS2}`])
         expect(seen.calls.map(i => i.tool)).toEqual(['get_user_participant_projects'])
-        expect((await runCommand($, 'refresh')).text).toBe('小小黎：本项目还没绑定 TAPD 项目，在面板里点一个绑定，或对 AI 说「这个项目对应 TAPD 的某某项目」')
+        expect((await runCommand($, 'refresh')).text).toBe('小黎：本项目还没绑定 TAPD 项目，在工作面板里点一个绑定，或对 AI 说「这个项目对应 TAPD 的某某项目」')
         expect(seen.written).toEqual([])
         await ui.unmount()
     })
@@ -1853,7 +1853,7 @@ describe('全局模式：查找顺序', () => {
         const projectState = projectStateOf(FG_ROOT)
         const { clock, seen, files } = await boot($, on, { cwd: FG_ROOT, files: { [projectState]: stringifyState([demoStory()]) } })
         const bound = await callBind($, { project: '演示项目' })
-        expect(String(bound.result)).toBe(`已把本项目（fg-demo）绑定到 TAPD 项目「演示项目」（${WS}），写入 ${global.config}；面板马上刷新待办`)
+        expect(String(bound.result)).toBe(`已把本项目（fg-demo）绑定到 TAPD 项目「演示项目」（${WS}），写入 ${global.config}；工作面板马上刷新待办`)
         expect(JSON.parse(files[global.config] ?? '')).toEqual({ ...GLOBAL_CONFIG, root: FG_ROOT })
         await clock.advance(1)
         const ui = await mountPane($)
@@ -1917,7 +1917,7 @@ describe('全局模式：绑定与解绑', () => {
         await click(ui, 3, confirmRow)
         expect(seen.written).toEqual([global.config])
         expect(JSON.parse(files[global.config] ?? '')).toEqual({ projectName: '演示项目二', tapdWorkspaceId: WS2, root: FG_ROOT })
-        expect(seen.toasts).toContain('小小黎：已绑定 TAPD 项目「演示项目二」，正在拉待办')
+        expect(seen.toasts).toContain('小黎：已绑定 TAPD 项目「演示项目二」，正在拉待办')
         await clock.advance(1)
         expect((await textsOf(ui))[HEADER_ROW]?.startsWith(`${BOARD_TITLE_SPACED} · 演示项目二 `)).toBe(true)
         expect(await rowOf(ui, `todo:${BUG_A}`)).toBeGreaterThan(0)
@@ -1943,15 +1943,15 @@ describe('全局模式：绑定与解绑', () => {
         /* 0.5.0 起多注册一个起名工具 setup，0.6.0 起再多一个工作流工具 workflow，0.7.0 起再多一个项目工具 project，0.8.0 起再多一个演练工具 guide */
         expect(seen.tools).toEqual(['progress', 'bind', 'setup', 'workflow', 'project', 'guide'])
         expect((await callBind($, { project: '演示' })).deny).toBe(
-            `小小黎：「演示」对上了 2 个项目：演示项目（${WS}）、演示项目二（${WS2}），请给全名或项目 ID，没有写入`
+            `小黎：「演示」对上了 2 个项目：演示项目（${WS}）、演示项目二（${WS2}），请给全名或项目 ID，没有写入`
         )
-        expect((await callBind($, { project: '不存在的项目' })).deny).toBe('小小黎：你参与的 TAPD 项目里没有名字含「不存在的项目」的项目，没有写入')
+        expect((await callBind($, { project: '不存在的项目' })).deny).toBe('小黎：你参与的 TAPD 项目里没有名字含「不存在的项目」的项目，没有写入')
         expect((await callBind($, { project: '演示项目', branchTemplate: 'feat/x;rm' })).deny).toBe(
-            '小小黎：参数不对，branchTemplate 要含 {id}，且只能含字母、数字与 . _ / -，没有写入'
+            '小黎：参数不对，branchTemplate 要含 {id}，且只能含字母、数字与 . _ / -，没有写入'
         )
         expect(seen.written).toEqual([])
         const result = await callBind($, { project: '演示项目', branchBase: 'origin/dev' })
-        expect(String(result.result)).toBe(`已把本项目（fg-demo）绑定到 TAPD 项目「演示项目」（${WS}），写入 ${global.config}；面板马上刷新待办`)
+        expect(String(result.result)).toBe(`已把本项目（fg-demo）绑定到 TAPD 项目「演示项目」（${WS}），写入 ${global.config}；工作面板马上刷新待办`)
         expect(parseConfig(files[global.config] ?? '')?.branchBase).toBe('origin/dev')
         await clock.advance(1)
         const ui = await mountPane($)
@@ -1967,7 +1967,7 @@ describe('全局模式：绑定与解绑', () => {
         const ui = await mountPane($)
         expect(await rowOf(ui, `todo:${STORY_A}`)).toBeGreaterThan(0)
         expect((await runCommand($, 'unbind')).text).toBe(
-            '小小黎：已解除本项目（fg-demo）与 TAPD 项目「演示项目」的绑定；进行中区与 state.json 不动，面板重新列出 TAPD 项目供绑定'
+            '小黎：已解除本项目（fg-demo）与 TAPD 项目「演示项目」的绑定；进行中区与 state.json 不动，工作面板重新列出 TAPD 项目供绑定'
         )
         expect(seen.written).toEqual([global.config])
         expect(JSON.parse(files[global.config] ?? '')).toEqual({ root: FG_ROOT, branchBase: 'origin/dev' })
@@ -1975,15 +1975,15 @@ describe('全局模式：绑定与解绑', () => {
         expect(texts).toContain(NO_BINDING_TEXT)
         expect(texts).toContain('需 9990001 演示-商家端-示例模块')
         expect(await rowOf(ui, `bind:${WS}`)).toBeGreaterThan(0)
-        expect((await runCommand($, 'unbind')).text).toBe('小小黎：本项目还没绑定 TAPD 项目，不用解除')
-        expect((await runCommand($, 'refresh')).text).toBe('小小黎：本项目还没绑定 TAPD 项目，在面板里点一个绑定，或对 AI 说「这个项目对应 TAPD 的某某项目」')
+        expect((await runCommand($, 'unbind')).text).toBe('小黎：本项目还没绑定 TAPD 项目，不用解除')
+        expect((await runCommand($, 'refresh')).text).toBe('小黎：本项目还没绑定 TAPD 项目，在工作面板里点一个绑定，或对 AI 说「这个项目对应 TAPD 的某某项目」')
         await ui.unmount()
     })
 
     test('项目内模式（yt-shelf 这类）：绑定工具与 unbind 都不碰项目内配置，说明原因', async ($, on) => {
         const { seen, files } = await boot($, on)
-        expect((await callBind($, { project: '演示项目' })).deny).toBe(`小小黎：本项目用项目内配置 ${CONFIG_FILE}，全局绑定不生效，没有写入`)
-        expect((await runCommand($, 'unbind')).text).toBe(`小小黎：本项目用项目内配置 ${CONFIG_FILE}，unbind 只清全局绑定，项目内配置没动`)
+        expect((await callBind($, { project: '演示项目' })).deny).toBe(`小黎：本项目用项目内配置 ${CONFIG_FILE}，全局绑定不生效，没有写入`)
+        expect((await runCommand($, 'unbind')).text).toBe(`小黎：本项目用项目内配置 ${CONFIG_FILE}，unbind 只清全局绑定，项目内配置没动`)
         expect(seen.written).toEqual([])
         expect(files[CONFIG_FILE]).toBe(JSON.stringify(CONFIG))
         expect(seen.calls).toEqual([])
@@ -1998,11 +1998,11 @@ describe('全局模式：绑定与解绑', () => {
         /* 0.7.0 起资料目录一句同时给出通用资料目录 */
         expect(seen.submitted).toEqual([
             {
-                text: `开工 ${STORY_A}（${GLOBAL_GUIDE}；${workflowGuide('story')}；${resourceDirsText(global.dir, SHARED)}；TAPD 评论署名 ——小小黎AI工作台）`,
+                text: `开工 ${STORY_A}（${GLOBAL_GUIDE}；${workflowGuide('story')}；${resourceDirsText(global.dir, SHARED)}；TAPD 评论署名 ——小黎AI工作台）`,
                 asUser: true
             }
         ])
-        expect(seen.toasts).toContain(`小小黎：已发出：开工 ${STORY_A}`)
+        expect(seen.toasts).toContain(`小黎：已发出：开工 ${STORY_A}`)
         expect(seen.written).toEqual([global.state])
         await startFromPane(ui, STORY_B)
         const command = seen.copied[0] ?? ''
@@ -2010,7 +2010,7 @@ describe('全局模式：绑定与解绑', () => {
         expect(command.startsWith(`if (-not (Test-Path '${worktree}')) { git -C '${FG_ROOT}' worktree add --no-track -b feat/1000102 '${worktree}' origin/master }`)).toBe(true)
         /* 0.7.0 起开工提示在 --add-dir 之前，并多一个通用资料目录的 --add-dir */
         expect(command).toContain(
-            `-n '1000102' '开工 ${STORY_B}（独立会话：worktree ${worktree}，分支 feat/1000102；${GLOBAL_GUIDE}；${workflowGuide('story')}；${resourceDirsText(global.dir, SHARED)}；TAPD 评论署名 ——小小黎AI工作台）' --add-dir '${global.dir}' --add-dir '${SHARED}' }`
+            `-n '1000102' '开工 ${STORY_B}（独立会话：worktree ${worktree}，分支 feat/1000102；${GLOBAL_GUIDE}；${workflowGuide('story')}；${resourceDirsText(global.dir, SHARED)}；TAPD 评论署名 ——小黎AI工作台）' --add-dir '${global.dir}' --add-dir '${SHARED}' }`
         )
         expect(command).not.toContain(`${FG_ROOT}/docs/xiaoli`)
         const task = parseProgress(files[global.state] ?? '').taskList.find(i => i.id === '1000102')
@@ -2226,7 +2226,7 @@ describe('0.4.1 缺陷修复', () => {
         expect(seen.calls.filter(i => i.tool === 'get_iterations').length).toBe(4)
         expect(await header()).toMatch(/\[ 刷新 \] 刷新于 \d{2}:\d{2}$/)
         expect(await iterationRow()).toBe('迭代：本迭代（迭代未加载，暂显示全部） ▸')
-        expect((await runCommand($, 'refresh')).text).toBe('小小黎：已刷新，待办 4 条')
+        expect((await runCommand($, 'refresh')).text).toBe('小黎：已刷新，待办 4 条')
         await ui.unmount()
     })
 
@@ -2234,10 +2234,10 @@ describe('0.4.1 缺陷修复', () => {
         const { clock, tapd } = await boot($, on, { tapdDown: true })
         await clock.advance(1)
         const failed = (await runCommand($, 'refresh')).text
-        expect(failed).toBe('小小黎：这次没拉到待办（多半是 TAPD 还没连上），正在自动重试（第 1 次），稍后看面板')
+        expect(failed).toBe('小黎：这次没拉到待办（多半是 TAPD 还没连上），正在自动重试（第 1 次），稍后看工作面板')
         expect(failed).not.toContain('已刷新')
         tapd.down = false
-        expect((await runCommand($, 'refresh')).text).toBe('小小黎：已刷新，待办 3 条')
+        expect((await runCommand($, 'refresh')).text).toBe('小黎：已刷新，待办 3 条')
         const ui = await mountPane($)
         expect(await textsOf(ui)).toContain('待办（3）')
         /* 重试期间手动刷新成功：标题行的重试提示一并清掉 */
@@ -2252,7 +2252,7 @@ describe('0.4.1 缺陷修复', () => {
         await startFromPane(ui, STORY_A)
         expect(seen.submitted).toEqual([])
         const toast = seen.toasts.at(-1) ?? ''
-        expect(toast.startsWith(`小小黎：没开工，写 ${STATE_FILE} 失败（`)).toBe(true)
+        expect(toast.startsWith(`小黎：没开工，写 ${STATE_FILE} 失败（`)).toBe(true)
         expect(toast.endsWith('），没有写入')).toBe(true)
         expect(seen.toasts.some(i => i.includes('已发出'))).toBe(false)
         await ui.unmount()
@@ -2267,7 +2267,7 @@ describe('0.4.1 缺陷修复', () => {
         expect(seen.copied).toEqual([])
         expect(seen.logs.some(i => i.includes('启动命令'))).toBe(false)
         const toast = seen.toasts.at(-1) ?? ''
-        expect(toast.startsWith(`小小黎：没开工，写 ${STATE_FILE} 失败（`)).toBe(true)
+        expect(toast.startsWith(`小黎：没开工，写 ${STATE_FILE} 失败（`)).toBe(true)
         expect(toast.endsWith('），没有写入')).toBe(true)
         expect((await textsOf(ui)).some(i => i.startsWith('启动命令'))).toBe(false)
         expect(files[STATE_FILE]).toBe(legacyState())
@@ -2277,10 +2277,10 @@ describe('0.4.1 缺陷修复', () => {
     test('取不到全局根目录、项目里也没有 config.json：绑定工具与 unbind 说明取不到用户目录并提示 XIAOXIAOLI_HOME，不再说「本项目用项目内配置」', async ($, on) => {
         const { seen } = await boot($, on, { cwd: OTHER_CWD, files: {}, globalRoot: null })
         const denied = (await callBind($, { project: '演示项目' })).deny
-        expect(denied).toBe('小小黎：取不到用户目录，无法使用全局绑定；可设环境变量 XIAOXIAOLI_HOME 指定全局目录，没有写入')
+        expect(denied).toBe('小黎：取不到用户目录，无法使用全局绑定；可设环境变量 XIAOXIAOLI_HOME 指定全局目录，没有写入')
         expect(String(denied)).not.toContain('项目内配置')
         const unbound = (await runCommand($, 'unbind')).text
-        expect(unbound).toBe('小小黎：取不到用户目录，无法使用全局绑定；可设环境变量 XIAOXIAOLI_HOME 指定全局目录，没有可解除的全局绑定')
+        expect(unbound).toBe('小黎：取不到用户目录，无法使用全局绑定；可设环境变量 XIAOXIAOLI_HOME 指定全局目录，没有可解除的全局绑定')
         expect(seen.written).toEqual([])
         expect(seen.calls).toEqual([])
     })
@@ -2304,7 +2304,7 @@ describe('0.4.1 缺陷修复', () => {
         const ui = await mountPane($)
         await startFromPane(ui, STORY_B)
         expect(seen.copied).toEqual([])
-        expect(seen.toasts.at(-1)).toBe(`小小黎：1000102 记的会话 ID 不是 UUID 形态，没有生成回到已有会话的命令，请检查 ${STATE_FILE}`)
+        expect(seen.toasts.at(-1)).toBe(`小黎：1000102 记的会话 ID 不是 UUID 形态，没有生成回到已有会话的命令，请检查 ${STATE_FILE}`)
         expect((await textsOf(ui)).some(i => i.startsWith('启动命令'))).toBe(false)
         await ui.unmount()
     })
@@ -2321,7 +2321,7 @@ describe('0.4.1 缺陷修复', () => {
         const ui = await mountPane($)
         await startFromPane(ui, weirdId)
         expect(seen.copied).toEqual([])
-        expect(seen.toasts.at(-1)).toBe('小小黎：没开工，短 ID「1000109a;b」不是纯数字，不能拼进分支名，没有生成启动命令')
+        expect(seen.toasts.at(-1)).toBe('小黎：没开工，短 ID「1000109a;b」不是纯数字，不能拼进分支名，没有生成启动命令')
         expect(seen.written).toEqual([])
         expect(files[STATE_FILE]).toBe(legacyState())
         await ui.unmount()
@@ -2338,14 +2338,14 @@ describe('0.4.1 缺陷修复', () => {
         const base = { id: '1000102', sessionId: SESSION_ID, isBusy: false }
         expect(routeStart({ ...base, taskList: legacy, isMainCheckout: true })).toBe('new')
         expect(routeStart({ ...base, taskList: legacy, isMainCheckout: false })).toBe('submit')
-        expect(statusText(legacy, SESSION_ID, true)).toBe('小小黎 · 1046775 第 7 步 单测中-上线后待修 4 条子代理进行中')
+        expect(statusText(legacy, SESSION_ID, true)).toBe('小黎 · 1046775 第 7 步 单测中-上线后待修 4 条子代理进行中')
         expect(statusText(legacy, SESSION_ID, false)).toBeUndefined()
     })
 
     test('状态行：主工作区的会话显示没记会话 ID 的旧条目', async ($, on) => {
         const files = { [CONFIG_FILE]: JSON.stringify(CONFIG), [STATE_FILE]: legacyState() }
         const { seen } = await boot($, on, { files })
-        expect(seen.statuses.at(-1)).toBe('小小黎 · 1046775 第 7 步 单测中-上线后待修 4 条子代理进行中')
+        expect(seen.statuses.at(-1)).toBe('小黎 · 1046775 第 7 步 单测中-上线后待修 4 条子代理进行中')
     })
 
     test('状态行：worktree 里的会话不显示没记会话 ID 的旧条目', async ($, on) => {
@@ -2354,7 +2354,7 @@ describe('0.4.1 缺陷修复', () => {
         expect(seen.statuses.some(i => i !== undefined)).toBe(false)
     })
 
-    test('本会话开工的提示带「小小黎：」前缀：会话正忙时排队', async ($, on) => {
+    test('本会话开工的提示带「小黎：」前缀：会话正忙时排队', async ($, on) => {
         const mine = storyTask('1000101', '演示需求甲', 'develop', { sessionId: SESSION_ID })
         const files = { [CONFIG_FILE]: JSON.stringify(CONFIG), [STATE_FILE]: stringifyState([mine]) }
         const { clock, seen } = await boot($, on, { files })
@@ -2362,19 +2362,19 @@ describe('0.4.1 缺陷修复', () => {
         const ui = await mountPane($)
         await $.turn.start({ text: '在忙', turnId: 't1' })
         await startFromPane(ui, STORY_A)
-        expect(seen.toasts).toContain(`小小黎：会话正忙，已排队：开工 ${STORY_A}`)
+        expect(seen.toasts).toContain(`小黎：会话正忙，已排队：开工 ${STORY_A}`)
         await ui.unmount()
     })
 
     test('终端不够宽：用户自己运行 /xiaoxiaoli show 时只说拉宽终端，不再建议运行 show；轮询自动打开时照旧提示', async ($, on) => {
         const { clock, seen, env } = await boot($, on, { paneUnplaced: true })
         await runCommand($, 'show')
-        expect(seen.toasts.at(-1)).toBe('小小黎：终端不够宽，侧栏没能画出来，把终端拉宽后再试')
+        expect(seen.toasts.at(-1)).toBe('小黎：终端不够宽，工作面板没能画出来，把终端拉宽后再试')
         expect(seen.toasts.at(-1)).not.toContain('/xiaoxiaoli show')
         await runCommand($, 'hide')
         env.value = 'show'
         await clock.advance(500)
-        expect(seen.toasts.at(-1)).toBe('小小黎：终端不够宽，侧栏先挂起；/xiaoxiaoli show 可直接打开')
+        expect(seen.toasts.at(-1)).toBe('小黎：终端不够宽，工作面板先挂起；/xiaoxiaoli show 可直接打开')
     })
 })
 
@@ -2687,8 +2687,8 @@ describe('0.4.2：跨项目开工、重新开工、bash 启动命令、取不到
         /* 0.7.0 起开工提示在 --add-dir 之前 */
         expect(command).toContain(`-n '1000102' '开工 ${STORY_B}（`)
         expect(command.endsWith(`' --add-dir '/home/dev/demo/docs/xiaoli'; fi`)).toBe(true)
-        expect(seen.toasts).toContain('小小黎：1000102 的启动命令已复制，到新的终端（bash/zsh）粘贴运行')
-        expect(seen.logs.some(i => i.startsWith('小小黎 1000102 启动命令（到新的终端（bash/zsh）粘贴运行）：if [ ! -d'))).toBe(true)
+        expect(seen.toasts).toContain('小黎：1000102 的启动命令已复制，到新的终端（bash/zsh）粘贴运行')
+        expect(seen.logs.some(i => i.startsWith('小黎 1000102 启动命令（到新的终端（bash/zsh）粘贴运行）：if [ ! -d'))).toBe(true)
         expect(await textsOf(ui)).toContain('  已复制，到新的终端（bash/zsh）粘贴运行')
         const task = parseProgress(files[stateFile] ?? '').taskList.find(i => i.id === '1000102') as ProgressTaskType
         expect(task.worktree).toBe('/home/dev/demo-1000102')
@@ -2706,7 +2706,7 @@ describe('0.4.2：跨项目开工、重新开工、bash 启动命令、取不到
         expect(missing).not.toContain(NO_CONFIG_TEXT)
         const { clock } = await boot($, on, { files: { [CONFIG_FILE]: JSON.stringify({ projectName: '缺项目 ID' }) }, globalRoot: null })
         await clock.advance(1)
-        expect((await runCommand($, 'refresh')).text).toBe('小小黎：本项目没配 TAPD（缺 config.json），只显示进行中需求，见 README')
+        expect((await runCommand($, 'refresh')).text).toBe('小黎：本项目没配 TAPD（缺 config.json），只显示进行中需求，见 README')
         const ui = await mountPane($)
         const texts = await textsOf(ui)
         expect(texts).toContain(NO_CONFIG_TEXT)
@@ -2728,9 +2728,9 @@ describe('0.5.0：起名与首次引导', () => {
     /** 引导两行加一行空行：还没起名时标题行往下挪这么多 */
     const GUIDE_ROWS = 3
     /** 会话启动时那条「第一次用」的提示（默认名） */
-    const HINT = '小小黎：第一次用，打开面板点「开始设置」给工作台起名，或输入 /xiaoxiaoli setup；不设也能照常用'
+    const HINT = '小黎：第一次用，打开工作面板点「开始设置」给工作台起名，或输入 /xiaoxiaoli setup；不设也能照常用'
     /** 取不到全局根目录时起名入口的说法 */
-    const NO_SAVE = `${NO_GLOBAL_ROOT_TEXT}，起的名字存不了，先用默认名「小小黎」`
+    const NO_SAVE = `${NO_GLOBAL_ROOT_TEXT}，起的名字存不了，先用默认名「小黎」`
     /** 演示需求在旧结构 state.json 里的状态行（去掉开头的名字） */
     const LEGACY_STATUS = ' · 1046775 第 7 步 单测中-上线后待修 4 条子代理进行中'
     /** 还没设置、但之前已自动发起过设置引导的档案（0.5.1 的标记） */
@@ -2764,11 +2764,11 @@ describe('0.5.0：起名与首次引导', () => {
         expect(['<', '>', '&', '"', "'"].map(ch => checkName(`小${ch}美`))).toEqual([html, html, html, html, html])
         expect(checkName(123)).toEqual({ reason: 'name 要填名字（文字）' })
         expect(checkName(undefined)).toEqual({ reason: 'name 要填名字（文字）' })
-        expect(DEFAULT_NAME).toBe('小小黎')
+        expect(DEFAULT_NAME).toBe('小黎')
         expect(fullNameOf('小美')).toBe('小美AI工作台')
-        expect(BOARD_TITLE).toBe('小小黎AI工作台')
+        expect(BOARD_TITLE).toBe('小黎AI工作台')
         expect(noticeText('小美', '已刷新')).toBe('小美：已刷新')
-        expect(nameOf({ name: '', isSkipped: true, isNewer: false, isGuided: false, role: '' })).toBe('小小黎')
+        expect(nameOf({ name: '', isSkipped: true, isNewer: false, isGuided: false, role: '' })).toBe('小黎')
         expect(nameOf({ name: '小美', isSkipped: false, isNewer: false, isGuided: true, role: 'test' })).toBe('小美')
     })
 
@@ -2877,7 +2877,7 @@ describe('0.5.0：起名与首次引导', () => {
         await click(ui, 5, await rowOf(ui, ACTION_SETUP_SKIP))
         expect(seen.written).toEqual([PROFILE_PATH])
         expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual({ version: 1, skipped: true })
-        expect(seen.toasts.at(-1)).toBe('小小黎：好的，先不设，名字用默认的；以后想起名用 /xiaoxiaoli setup，或 /xiaoxiaoli name <名字>')
+        expect(seen.toasts.at(-1)).toBe('小黎：好的，先不设，名字用默认的；以后想起名用 /xiaoxiaoli setup，或 /xiaoxiaoli name <名字>')
         expect(await rowOf(ui, ACTION_SETUP_START)).toBe(-1)
         /* 0.8.0 起先不设之后、演练还没处理过，引导位置换成演练引导两行，标题行跟着下移 */
         expect((await linesOf(ui))[HEADER_ROW]?.action).toBe(ACTION_TOUR_START)
@@ -2899,21 +2899,21 @@ describe('0.5.0：起名与首次引导', () => {
         expect(seen.submitted).toEqual([{ text: setupPrompt({ name: '', isUnbound: false, projectName: 'demo', isTourOffered: true }), asUser: true }])
         /* 0.5.1 起末尾多一条「不想现在设就不追问」，0.8.0 起再多一条演练 */
         expect(text.split('\n')).toHaveLength(6)
-        expect(text.startsWith('设置工作台（来自工作台面板的「开始设置」或 /xiaoxiaoli setup），按下面做：')).toBe(true)
+        expect(text.startsWith('设置工作台（来自工作面板的「开始设置」或 /xiaoxiaoli setup），按下面做：')).toBe(true)
         expect(text).toContain('用 AskUserQuestion 工具问我「工作台叫什么名字？」，说明最终名称是「名字+AI工作台」')
-        expect(text).toContain('选项里给「保持默认：小小黎」，我也可以选「其他」自己填')
+        expect(text).toContain('选项里给「保持默认：小黎」，我也可以选「其他」自己填')
         expect(text).toContain('3. 拿到名字和工种后调 mcp__xiaoxiaoli__setup 保存')
         expect(text).toContain('用一两句话告诉我结果，不要做别的事')
         /* 0.8.0 起第 4 条是演练，「不想现在设」挪到第 5 条 */
         expect(text).toContain('5. 我不想现在设（关掉提问、按了取消或说以后再说）时不要追问，也不要调 mcp__xiaoxiaoli__setup')
-        expect(text).toContain('只告诉我以后想起名可以点工作台面板上的「开始设置」或输入 /xiaoxiaoli setup')
+        expect(text).toContain('只告诉我以后想起名可以点工作面板上的「开始设置」或输入 /xiaoxiaoli setup')
         expect(text).not.toContain('mcp__xiaoxiaoli__bind')
-        expect(seen.toasts.at(-1)).toBe('小小黎：已发出：设置工作台')
+        expect(seen.toasts.at(-1)).toBe('小黎：已发出：设置工作台')
         expect(await rowOf(ui, ACTION_SETUP_START)).toBe(1)
         expect(seen.written).toEqual([])
         await $.turn.start({ text: '在忙', turnId: 't1' })
         await click(ui, 5, await rowOf(ui, ACTION_SETUP_START))
-        expect(seen.toasts.at(-1)).toBe('小小黎：会话正忙，已排队：设置工作台')
+        expect(seen.toasts.at(-1)).toBe('小黎：会话正忙，已排队：设置工作台')
         expect(seen.submitted).toHaveLength(2)
         await ui.unmount()
     })
@@ -2923,7 +2923,7 @@ describe('0.5.0：起名与首次引导', () => {
         /* 没绑定：绑定工具与起名工具都在工具列表里，进度工具在 ToolSearch 后面 */
         /* 0.7.0 起项目工具 project 也放在 ToolSearch 后面 */
         expect(seen.deferredTools).toEqual(['progress', 'project'])
-        expect((await runCommand($, 'setup')).text).toBe('小小黎：已发出：设置工作台')
+        expect((await runCommand($, 'setup')).text).toBe('小黎：已发出：设置工作台')
         expect(seen.submitted).toEqual([])
         await clock.advance(1)
         const text = seen.submitted[0]?.text ?? ''
@@ -2944,7 +2944,7 @@ describe('0.5.0：起名与首次引导', () => {
         await clock.advance(1)
         const text = seen.submitted[0]?.text ?? ''
         expect(text).toContain('现在叫「小美AI工作台」')
-        expect(text).toContain('选项里给「保持当前：小美」和「恢复默认：小小黎」')
+        expect(text).toContain('选项里给「保持当前：小美」和「恢复默认：小黎」')
         expect(text).not.toContain('mcp__xiaoxiaoli__bind')
         expect((await runCommand($, 'setup 小丽')).text).toBe('小美：setup 不带参数；直接改名用 /xiaoxiaoli name <名字>')
         expect(seen.submitted).toHaveLength(1)
@@ -2962,9 +2962,9 @@ describe('0.5.0：起名与首次引导', () => {
         const ui = await mountPane($)
         expect(await rowOf(ui, ACTION_SETUP_START)).toBe(1)
         expect(seen.titles).toEqual([BOARD_TITLE])
-        expect(seen.statuses.at(-1)).toBe(`小小黎${LEGACY_STATUS}`)
+        expect(seen.statuses.at(-1)).toBe(`小黎${LEGACY_STATUS}`)
         const result = await callSetup($, { name: ' 小美AI工作台 ' })
-        expect(String(result.result)).toBe(`工作台现在叫 小美AI工作台（已写入 ${PROFILE_PATH}；面板标题、提示前缀与 TAPD 评论署名已换成新名字）`)
+        expect(String(result.result)).toBe(`工作台现在叫 小美AI工作台（已写入 ${PROFILE_PATH}；工作面板标题栏、提示前缀与 TAPD 评论署名已换成新名字）`)
         expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual({ version: 1, name: '小美', theme: 'dark' })
         expect(seen.written).toEqual([PROFILE_PATH])
         /* 面板开着：同一个 id 重开一次换标题 */
@@ -2981,10 +2981,10 @@ describe('0.5.0：起名与首次引导', () => {
 
     test('mcp__xiaoxiaoli__setup 名字不合格：如实拒绝，不写入，名字与引导都不变', async ($, on) => {
         const { clock, seen } = await boot($, on, { profile: null })
-        expect((await callSetup($, { name: '小<美' })).deny).toBe('小小黎：参数不对，名字不能含 < > & " \' 这五个字符（名字会进 TAPD 评论的署名），没有写入')
-        expect((await callSetup($, {})).deny).toBe('小小黎：参数不对，name 与 role 至少给一个，没有写入')
-        expect((await callSetup($, { name: '一二三四五六七八九十甲乙丙' })).deny).toBe('小小黎：参数不对，名字最多 12 个字符，现在是 13 个，没有写入')
-        expect((await callSetup($, { name: ' AI 工作台 ' })).deny).toBe('小小黎：参数不对，名字不能为空（去掉首尾空白与「AI工作台」后缀后什么也不剩），没有写入')
+        expect((await callSetup($, { name: '小<美' })).deny).toBe('小黎：参数不对，名字不能含 < > & " \' 这五个字符（名字会进 TAPD 评论的署名），没有写入')
+        expect((await callSetup($, {})).deny).toBe('小黎：参数不对，name 与 role 至少给一个，没有写入')
+        expect((await callSetup($, { name: '一二三四五六七八九十甲乙丙' })).deny).toBe('小黎：参数不对，名字最多 12 个字符，现在是 13 个，没有写入')
+        expect((await callSetup($, { name: ' AI 工作台 ' })).deny).toBe('小黎：参数不对，名字不能为空（去掉首尾空白与「AI工作台」后缀后什么也不剩），没有写入')
         expect(seen.written).toEqual([])
         await clock.advance(1)
         const ui = await mountPane($)
@@ -2995,13 +2995,13 @@ describe('0.5.0：起名与首次引导', () => {
     test('mcp__xiaoxiaoli__setup 写文件失败：如实拒绝并带原因，名字不变；「先不设」写失败也提示原因，引导行留着', async ($, on) => {
         const { clock, seen } = await boot($, on, { profile: null, writeDenied: true })
         const denied = String((await callSetup($, { name: '小美' })).deny)
-        expect(denied.startsWith(`小小黎：写 ${PROFILE_PATH} 失败（`)).toBe(true)
+        expect(denied.startsWith(`小黎：写 ${PROFILE_PATH} 失败（`)).toBe(true)
         expect(denied.endsWith('），没有写入')).toBe(true)
         await clock.advance(1)
         const ui = await mountPane($)
         expect((await textsOf(ui))[HEADER_ROW + GUIDE_ROWS]?.startsWith(`${BOARD_TITLE_SPACED} · 演示项目`)).toBe(true)
         await click(ui, 5, await rowOf(ui, ACTION_SETUP_SKIP))
-        expect((seen.toasts.at(-1) ?? '').startsWith(`小小黎：没记下「先不设」，写 ${PROFILE_PATH} 失败（`)).toBe(true)
+        expect((seen.toasts.at(-1) ?? '').startsWith(`小黎：没记下「先不设」，写 ${PROFILE_PATH} 失败（`)).toBe(true)
         expect(await rowOf(ui, ACTION_SETUP_SKIP)).toBe(2)
         await ui.unmount()
     })
@@ -3014,9 +3014,9 @@ describe('0.5.0：起名与首次引导', () => {
         const ui = await mountPane($)
         expect(await rowOf(ui, ACTION_SETUP_START)).toBe(-1)
         expect((await textsOf(ui))[HEADER_ROW]?.startsWith(`${BOARD_TITLE_SPACED} · 演示项目`)).toBe(true)
-        expect((await runCommand($, 'setup')).text).toBe(`小小黎：${NO_SAVE}，没有发起设置`)
-        expect((await runCommand($, 'name 小美')).text).toBe(`小小黎：没改名，${NO_SAVE}，没有写入`)
-        expect((await callSetup($, { name: '小美' })).deny).toBe(`小小黎：${NO_SAVE}，没有写入`)
+        expect((await runCommand($, 'setup')).text).toBe(`小黎：${NO_SAVE}，没有发起设置`)
+        expect((await runCommand($, 'name 小美')).text).toBe(`小黎：没改名，${NO_SAVE}，没有写入`)
+        expect((await callSetup($, { name: '小美' })).deny).toBe(`小黎：${NO_SAVE}，没有写入`)
         expect(seen.submitted).toEqual([])
         expect(seen.written).toEqual([])
         await ui.unmount()
@@ -3026,9 +3026,9 @@ describe('0.5.0：起名与首次引导', () => {
         const newer = JSON.stringify({ version: 2, name: '小美', extra: 1 })
         const { clock, seen, files } = await boot($, on, { profile: newer })
         expect(seen.toasts.some(i => i.includes('第一次用'))).toBe(false)
-        expect((await callSetup($, { name: '小丽' })).deny).toBe(`小小黎：${PROFILE_NEWER_TEXT}，没有写入`)
-        expect((await runCommand($, 'name 小丽')).text).toBe(`小小黎：没改名，${PROFILE_NEWER_TEXT}，没有写入`)
-        expect((await runCommand($, 'setup')).text).toBe(`小小黎：${PROFILE_NEWER_TEXT}，没有发起设置`)
+        expect((await callSetup($, { name: '小丽' })).deny).toBe(`小黎：${PROFILE_NEWER_TEXT}，没有写入`)
+        expect((await runCommand($, 'name 小丽')).text).toBe(`小黎：没改名，${PROFILE_NEWER_TEXT}，没有写入`)
+        expect((await runCommand($, 'setup')).text).toBe(`小黎：${PROFILE_NEWER_TEXT}，没有发起设置`)
         await clock.advance(1)
         const ui = await mountPane($)
         expect(await rowOf(ui, ACTION_SETUP_START)).toBe(-1)
@@ -3041,13 +3041,13 @@ describe('0.5.0：起名与首次引导', () => {
 
     test('/xiaoxiaoli name：不带参数回当前名字与用法；带参数不经 AI 直接校验并保存（名字里可以有空格，后缀自动去掉），不合格不写', async ($, on) => {
         const { seen, files } = await boot($, on, { profile: null })
-        expect((await runCommand($, 'name')).text).toBe('小小黎：工作台现在叫 小小黎AI工作台（没起名，用的默认名）；改名用 /xiaoxiaoli name <名字>，或 /xiaoxiaoli setup 让 AI 来问')
-        expect((await runCommand($, 'name 一二三四五六七八九十甲乙丙')).text).toBe('小小黎：没改名，名字最多 12 个字符，现在是 13 个')
+        expect((await runCommand($, 'name')).text).toBe('小黎：工作台现在叫 小黎AI工作台（没起名，用的默认名）；改名用 /xiaoxiaoli name <名字>，或 /xiaoxiaoli setup 让 AI 来问')
+        expect((await runCommand($, 'name 一二三四五六七八九十甲乙丙')).text).toBe('小黎：没改名，名字最多 12 个字符，现在是 13 个')
         expect(seen.written).toEqual([])
         expect((await runCommand($, 'name  小 美工作台 ')).text).toBe(`小 美：已改名，工作台现在叫 小 美AI工作台（写入 ${PROFILE_PATH}）`)
         expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual({ version: 1, name: '小 美' })
         expect((await runCommand($, 'name')).text).toBe('小 美：工作台现在叫 小 美AI工作台；改名用 /xiaoxiaoli name <名字>，或 /xiaoxiaoli setup 让 AI 来问')
-        expect((await runCommand($, 'nonsense')).text?.startsWith('小 美：用法 /xiaoxiaoli show 打开侧栏')).toBe(true)
+        expect((await runCommand($, 'nonsense')).text?.startsWith('小 美：用法 /xiaoxiaoli show 打开工作面板')).toBe(true)
         expect((await runCommand($, 'nonsense')).text).toContain(' · setup 让 AI 引导给工作台起名（没绑定 TAPD 的项目顺带问绑定） · name <名字> 直接改名')
         expect(seen.submitted).toEqual([])
     })
@@ -3086,6 +3086,54 @@ describe('0.5.0：起名与首次引导', () => {
         await ui.unmount()
     })
 
+    test('0.9.2 默认名是「小黎」：没起名时标题「小黎AI工作台」、提示前缀「小黎：」、开工消息署名「——小黎AI工作台」，设置引导给「保持默认：小黎」', async ($, on) => {
+        expect(DEFAULT_NAME).toBe('小黎')
+        expect([fullNameOf(DEFAULT_NAME), BOARD_TITLE, spacedTitleOf(DEFAULT_NAME), BOARD_TITLE_SPACED]).toEqual(['小黎AI工作台', '小黎AI工作台', '小 黎 A I 工 作 台', '小 黎 A I 工 作 台'])
+        expect(setupPrompt({ name: '', isUnbound: false, projectName: 'fg-demo', isTourOffered: false })).toContain('选项里给「保持默认：小黎」，我也可以选「其他」自己填')
+        const global = globalFilesOf(FG_ROOT)
+        /* boot 默认的档案是选过「先不设」的：名字用默认 */
+        const { clock, seen } = await boot($, on, { cwd: FG_ROOT, files: { [global.config]: JSON.stringify(GLOBAL_CONFIG) } })
+        expect((await runCommand($, 'name')).text).toBe('小黎：工作台现在叫 小黎AI工作台（没起名，用的默认名）；改名用 /xiaoxiaoli name <名字>，或 /xiaoxiaoli setup 让 AI 来问')
+        await clock.advance(1)
+        const ui = await mountPane($)
+        expect((await textsOf(ui))[HEADER_ROW]?.startsWith('小 黎 A I 工 作 台 · 演示项目')).toBe(true)
+        await startFromPane(ui, STORY_A)
+        expect(seen.submitted.at(-1)?.text.endsWith('；TAPD 评论署名 ——小黎AI工作台）')).toBe(true)
+        expect(seen.toasts).toContain(`小黎：已发出：开工 ${STORY_A}`)
+        await ui.unmount()
+    })
+
+    test('0.9.2 档案里存着「小小黎」（以前选「保持默认」时存下的）：照常当作起的名字，标题、提示前缀与 TAPD 署名都不变；setup 给「保持当前：小小黎」与「恢复默认：小黎」，传「小黎」才换成新默认名', async ($, on) => {
+        const OLD = '小小黎'
+        const oldState = parseProfile(namedProfile(OLD))
+        expect(oldState).toEqual({ name: OLD, isSkipped: false, isNewer: false, isGuided: false, role: '' })
+        expect(nameOf(oldState)).toBe(OLD)
+        expect(isSetupPending({ ...oldState, path: PROFILE_PATH })).toBe(false)
+        const global = globalFilesOf(FG_ROOT)
+        const files = { [global.config]: JSON.stringify(GLOBAL_CONFIG), [PROFILE_PATH]: JSON.stringify({ version: 1, name: OLD, tour: 'done' }) }
+        const { clock, seen } = await boot($, on, { cwd: FG_ROOT, files })
+        expect(seen.toasts.some(i => i.includes('第一次用'))).toBe(false)
+        expect((await runCommand($, 'name')).text).toBe('小小黎：工作台现在叫 小小黎AI工作台；改名用 /xiaoxiaoli name <名字>，或 /xiaoxiaoli setup 让 AI 来问')
+        expect((await runCommand($, 'setup')).text).toBe('小小黎：已发出：设置工作台')
+        await clock.advance(1)
+        const prompt = seen.submitted[0]?.text ?? ''
+        expect(prompt).toContain('现在叫「小小黎AI工作台」')
+        expect(prompt).toContain('选项里给「保持当前：小小黎」和「恢复默认：小黎」')
+        const ui = await mountPane($)
+        expect((await textsOf(ui))[HEADER_ROW]?.startsWith('小 小 黎 A I 工 作 台 · 演示项目')).toBe(true)
+        await startFromPane(ui, STORY_A)
+        expect(seen.submitted.at(-1)?.text.endsWith('；TAPD 评论署名 ——小小黎AI工作台）')).toBe(true)
+        expect(seen.toasts).toContain(`小小黎：已发出：开工 ${STORY_A}`)
+        expect(seen.written.includes(PROFILE_PATH)).toBe(false)
+        /* 用户选「恢复默认」：AI 传「小黎」，这时才换成新默认名 */
+        const restored = await callSetup($, { name: DEFAULT_NAME })
+        expect(String(restored.result)).toBe(`工作台现在叫 小黎AI工作台（已写入 ${PROFILE_PATH}；工作面板标题栏、提示前缀与 TAPD 评论署名已换成新名字）`)
+        expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual({ version: 1, name: '小黎', tour: 'done' })
+        expect((await textsOf(ui))[HEADER_ROW]?.startsWith('小 黎 A I 工 作 台 · 演示项目')).toBe(true)
+        expect((await runCommand($, 'name')).text?.startsWith('小黎：工作台现在叫 小黎AI工作台；')).toBe(true)
+        await ui.unmount()
+    })
+
     test('PowerShell 启动命令：弯单引号 ‘ ’ ‚ ‛ 与直单引号一样写两遍，提示里的自由文字收不掉字符串；bash 写法不受影响', () => {
         const prompt = "开工 1（署名 ——a’b‘c‚d‛e'f）"
         const plan = { worktree: 'D:\\work\\demo-1', branch: 'feat/1', base: 'origin/master', sessionId: SESSION_ID, id: '1', prompt, addDir: '' }
@@ -3100,8 +3148,8 @@ describe('0.5.1：首次使用自动发起设置引导', () => {
     const PROFILE_PATH = `${GLOBAL_ROOT}/profile.json`
     /** 会话启动后等多久自动发起，与 register.tsx 的 AUTO_GUIDE_DELAY_MS 一致 */
     const DELAY = 3000
-    const HINT = '小小黎：第一次用，打开面板点「开始设置」给工作台起名，或输入 /xiaoxiaoli setup；不设也能照常用'
-    const AUTO = '小小黎：第一次用，正在帮你设置工作台名字；不想设直接选「保持默认」，以后可点面板上的「开始设置」或输入 /xiaoxiaoli setup'
+    const HINT = '小黎：第一次用，打开工作面板点「开始设置」给工作台起名，或输入 /xiaoxiaoli setup；不设也能照常用'
+    const AUTO = '小黎：第一次用，正在帮你设置工作台名字；不想设直接选「保持默认」，以后可点工作面板上的「开始设置」或输入 /xiaoxiaoli setup'
     /** 本会话自动发起时记进档案的标记 */
     const MARK = { version: 1, guided: true, guidedBy: SESSION_ID }
     /** 「第一次用」类提示出现了几次 */
@@ -3111,10 +3159,10 @@ describe('0.5.1：首次使用自动发起设置引导', () => {
         const auto = setupPrompt({ name: '', isUnbound: false, projectName: 'demo', isAuto: true })
         const manual = setupPrompt({ name: '', isUnbound: false, projectName: 'demo' })
         expect(auto.split('\n')[0]).toBe('首次使用，自动发起设置工作台（只自动这一次），按下面做：')
-        expect(manual.split('\n')[0]).toBe('设置工作台（来自工作台面板的「开始设置」或 /xiaoxiaoli setup），按下面做：')
+        expect(manual.split('\n')[0]).toBe('设置工作台（来自工作面板的「开始设置」或 /xiaoxiaoli setup），按下面做：')
         expect(auto.split('\n').slice(1)).toEqual(manual.split('\n').slice(1))
         expect(auto.split('\n').at(-1)).toBe(
-            '4. 我不想现在设（关掉提问、按了取消或说以后再说）时不要追问，也不要调 mcp__xiaoxiaoli__setup，只告诉我以后想起名可以点工作台面板上的「开始设置」或输入 /xiaoxiaoli setup'
+            '4. 我不想现在设（关掉提问、按了取消或说以后再说）时不要追问，也不要调 mcp__xiaoxiaoli__setup，只告诉我以后想起名可以点工作面板上的「开始设置」或输入 /xiaoxiaoli setup'
         )
     })
 
@@ -3525,7 +3573,7 @@ describe('0.6.0：工种与工作流', () => {
     test('不建分支的开工消息与新会话命令：在项目目录直接起 claude，PowerShell 与 bash 两套，引号规则沿用；开工消息里取工作流的一句按种类', () => {
         expect(workflowGuide('bug')).toBe('先调 mcp__xiaoxiaoli__workflow 取本项目工作流（kind 传 bug），按它的步骤、细则与「先问」走，进度用它的步骤键，其余照技能的通用规则')
         expect(herePrompt({ longId: STORY_B, root: FG_ROOT, dataDir: 'D:/data', kind: 'bug' })).toBe(
-            `开工 ${STORY_B}（独立会话：在项目目录 ${FG_ROOT}，不建分支；${GLOBAL_GUIDE}；${workflowGuide('bug')}；项目资料目录 D:/data；TAPD 评论署名 ——小小黎AI工作台）`
+            `开工 ${STORY_B}（独立会话：在项目目录 ${FG_ROOT}，不建分支；${GLOBAL_GUIDE}；${workflowGuide('bug')}；项目资料目录 D:/data；TAPD 评论署名 ——小黎AI工作台）`
         )
         expect(submitText({ longId: BUG_A, dataDir: 'D:/data', kind: 'bug' })).toContain(`；${workflowGuide('bug')}；`)
         const plan = { sessionId: SESSION_ID, id: '1000102', prompt: "开工 1（a’b'c）", addDir: 'D:/data' }
@@ -3542,7 +3590,7 @@ describe('0.6.0：工种与工作流', () => {
         await startFromPane(ui, STORY_A)
         /* 0.7.0 起资料目录一句同时给出通用资料目录 */
         expect(seen.submitted).toEqual([
-            { text: `开工 ${STORY_A}（${GLOBAL_GUIDE}；${workflowGuide('story')}；${resourceDirsText(global.dir, SHARED)}；TAPD 评论署名 ——小小黎AI工作台）`, asUser: true }
+            { text: `开工 ${STORY_A}（${GLOBAL_GUIDE}；${workflowGuide('story')}；${resourceDirsText(global.dir, SHARED)}；TAPD 评论署名 ——小黎AI工作台）`, asUser: true }
         ])
         const mine = parseProgress(files[global.state] ?? '').taskList.find(i => i.id === '1000101') as ProgressTaskType
         expect({ workflow: mine.workflow, keys: keysOf(mine.steps), doing: mine.steps.find(i => i.status === 'doing')?.key }).toEqual({
@@ -3559,7 +3607,7 @@ describe('0.6.0：工种与工作流', () => {
         const other = parseProgress(files[global.state] ?? '').taskList.find(i => i.id === '1000102') as ProgressTaskType
         expect({ branch: other.branch, worktree: other.worktree, workflow: other.workflow }).toEqual({ branch: undefined, worktree: undefined, workflow: 'test' })
         expect((await textsOf(ui)).some(i => i.startsWith('启动命令 1000102 · 新会话（项目目录，不建分支）'))).toBe(true)
-        expect(seen.toasts).toContain('小小黎：1000102 的启动命令已复制，到新的 PowerShell 窗口粘贴运行')
+        expect(seen.toasts).toContain('小黎：1000102 的启动命令已复制，到新的 PowerShell 窗口粘贴运行')
         await click(ui, 2, await rowOf(ui, ACTION_LAUNCH_CLOSE))
         await startFromPane(ui, STORY_B)
         expect(seen.copied[1]).toBe(`Set-Location '${FG_ROOT}'; claude --resume ${other.sessionId}`)
@@ -3598,7 +3646,7 @@ describe('0.6.0：工种与工作流', () => {
         /* 0.7.0 起开工提示在 --add-dir 之前，并多一个通用资料目录的 --add-dir */
         expect(command).toContain(`-n '1000102' '开工 ${STORY_B}（独立会话：在项目目录 /home/dev/demo，不建分支；`)
         expect(command.endsWith(`' --add-dir '${dir}' --add-dir '${globalRoot}/shared'`)).toBe(true)
-        expect(seen.toasts).toContain('小小黎：1000102 的启动命令已复制，到新的终端（bash/zsh）粘贴运行')
+        expect(seen.toasts).toContain('小黎：1000102 的启动命令已复制，到新的终端（bash/zsh）粘贴运行')
         await ui.unmount()
     })
 
@@ -3625,7 +3673,7 @@ describe('0.6.0：工种与工作流', () => {
         expect(String((await callProgress($, { id: '9990001', step: 'unit', status: 'doing' })).result)).toContain('第 7 步 单测中')
         await callProgress($, { id: '9990009', title: '演示-测试需求', step: 'cases', status: 'doing' })
         expect((await callProgress($, { id: '9990009', step: 'develop', status: 'doing' })).deny).toBe(
-            '小小黎：需求的步骤只有 fetch、sort、read、align、cases、prepare、execute、bugs、regress、report、tapd，没有写入'
+            '小黎：需求的步骤只有 fetch、sort、read、align、cases、prepare、execute、bugs、regress、report、tapd，没有写入'
         )
         const set = await callWorkflow($, { action: 'set', scope: 'project', definition: MINI })
         expect(set.deny).toBeUndefined()
@@ -3649,9 +3697,9 @@ describe('0.6.0：工种与工作流', () => {
         expect(head?.startsWith('来源：内置 · 前端（')).toBe(true)
         expect(head).toContain('workflows/frontend.json）；开工建分支；进行中的条目按各自开工时记下的步骤走，不受它影响')
         expect(keysOf((JSON.parse(json ?? '{}') as { bug: { key: string }[] }).bug)).toEqual(['screenshot', 'env', 'reproduce', 'diagnose', 'fix', 'verify'])
-        expect((await runCommand($, 'role 测试')).text?.startsWith('小小黎：已改，工种：测试，从下一条新开工的条目起按内置 · 测试的工作流')).toBe(true)
+        expect((await runCommand($, 'role 测试')).text?.startsWith('小黎：已改，工种：测试，从下一条新开工的条目起按内置 · 测试的工作流')).toBe(true)
         expect(String((await callWorkflow($, { action: 'get' })).result).startsWith('来源：内置 · 测试（')).toBe(true)
-        expect((await callWorkflow($, { action: 'get', kind: 'task' })).deny).toBe('小小黎：参数不对，kind 只能是 story、bug，没有写入')
+        expect((await callWorkflow($, { action: 'get', kind: 'task' })).deny).toBe('小黎：参数不对，kind 只能是 story、bug，没有写入')
     })
 
     test('workflow 工具 set：校验通过才写规范后的定义，返回写到了哪、从新开工的条目起生效；项目自定义优先于个人，新开工的条目按它建', async ($, on) => {
@@ -3682,22 +3730,22 @@ describe('0.6.0：工种与工作流', () => {
     test('workflow 工具 set 的失败：定义不合格、项目内模式存项目自定义、取不到全局根目录、那一层文件版本比本 mod 新、写文件失败，都不写入', async ($, on) => {
         const { seen, files } = await boot($, on, { files: { [CONFIG_FILE]: JSON.stringify(CONFIG), [PERSONAL_FLOW]: JSON.stringify({ ...MINI, version: 2 }) } })
         expect((await callWorkflow($, { action: 'set', scope: 'personal', definition: { story: [], bug: MINI.bug } })).deny).toBe(
-            '小小黎：definition 不合格：需求（story）要有 1 到 20 步，现在是 0 步，没有写入'
+            '小黎：definition 不合格：需求（story）要有 1 到 20 步，现在是 0 步，没有写入'
         )
         expect((await callWorkflow($, { action: 'set', scope: 'project', definition: MINI })).deny).toBe(
-            `小小黎：本项目用项目内配置 ${CONFIG_FILE}（流程按项目内文档约定），没有全局项目目录，项目自定义工作流存不了；要对所有项目生效可用 scope personal，没有写入`
+            `小黎：本项目用项目内配置 ${CONFIG_FILE}（流程按项目内文档约定），没有全局项目目录，项目自定义工作流存不了；要对所有项目生效可用 scope personal，没有写入`
         )
-        expect((await callWorkflow($, { action: 'set', scope: 'personal', definition: MINI })).deny).toBe(`小小黎：${PERSONAL_FLOW} 的版本比本 mod 新，先更新 mod，没有写入`)
-        expect((await callWorkflow($, { action: 'reset', scope: 'personal' })).deny).toBe(`小小黎：${PERSONAL_FLOW} 的版本比本 mod 新，先更新 mod，没有写入`)
-        expect((await callWorkflow($, { action: 'set', scope: 'personal' })).deny).toBe('小小黎：参数不对，set 要给完整的 definition（story、bug，可选 branch、title），没有写入')
+        expect((await callWorkflow($, { action: 'set', scope: 'personal', definition: MINI })).deny).toBe(`小黎：${PERSONAL_FLOW} 的版本比本 mod 新，先更新 mod，没有写入`)
+        expect((await callWorkflow($, { action: 'reset', scope: 'personal' })).deny).toBe(`小黎：${PERSONAL_FLOW} 的版本比本 mod 新，先更新 mod，没有写入`)
+        expect((await callWorkflow($, { action: 'set', scope: 'personal' })).deny).toBe('小黎：参数不对，set 要给完整的 definition（story、bug，可选 branch、title），没有写入')
         expect(seen.written).toEqual([])
         expect(JSON.parse(files[PERSONAL_FLOW] ?? '').version).toBe(2)
     })
 
     test('workflow 工具 set 的失败（续）：取不到全局根目录、写文件失败', async ($, on) => {
         const { seen } = await boot($, on, { globalRoot: null })
-        expect((await callWorkflow($, { action: 'set', scope: 'personal', definition: MINI })).deny).toBe(`小小黎：${NO_GLOBAL_ROOT_TEXT}，没有写入`)
-        expect((await callWorkflow($, { action: 'reset', scope: 'project' })).deny).toBe(`小小黎：${NO_GLOBAL_ROOT_TEXT}，没有写入`)
+        expect((await callWorkflow($, { action: 'set', scope: 'personal', definition: MINI })).deny).toBe(`小黎：${NO_GLOBAL_ROOT_TEXT}，没有写入`)
+        expect((await callWorkflow($, { action: 'reset', scope: 'project' })).deny).toBe(`小黎：${NO_GLOBAL_ROOT_TEXT}，没有写入`)
         expect(seen.written).toEqual([])
     })
 
@@ -3705,7 +3753,7 @@ describe('0.6.0：工种与工作流', () => {
         const global = globalFilesOf(FG_ROOT)
         await boot($, on, { cwd: FG_ROOT, files: { [global.config]: JSON.stringify(GLOBAL_CONFIG) }, writeDenied: true })
         const denied = String((await callWorkflow($, { action: 'set', scope: 'project', definition: MINI })).deny)
-        expect(denied.startsWith(`小小黎：写 ${projectFlowOf(FG_ROOT)} 失败（`)).toBe(true)
+        expect(denied.startsWith(`小黎：写 ${projectFlowOf(FG_ROOT)} 失败（`)).toBe(true)
         expect(denied.endsWith('），没有写入')).toBe(true)
     })
 
@@ -3731,7 +3779,7 @@ describe('0.6.0：工种与工作流', () => {
         expect(String((await callWorkflow($, { action: 'set', scope: 'personal', definition: MINI })).result)).toContain(
             '本项目是项目内模式，沿用前端步骤，自定义工作流对它不生效（对全局模式的项目生效）'
         )
-        expect((await runCommand($, 'role')).text).toBe('小小黎：工种：测试；本项目生效的工作流：项目内模式（沿用前端步骤，流程按项目内文档）；可选 前端、后端、Python、测试、产品、其他，改用 /xiaoxiaoli role <工种>')
+        expect((await runCommand($, 'role')).text).toBe('小黎：工种：测试；本项目生效的工作流：项目内模式（沿用前端步骤，流程按项目内文档）；可选 前端、后端、Python、测试、产品、其他，改用 /xiaoxiaoli role <工种>')
         await clock.advance(1)
         const ui = await mountPane($)
         await startFromPane(ui, STORY_A)
@@ -3746,10 +3794,10 @@ describe('0.6.0：工种与工作流', () => {
         const files = { [global.config]: JSON.stringify(GLOBAL_CONFIG), [projectFlowOf(FG_ROOT)]: '{oops' }
         const { clock, seen } = await boot($, on, { cwd: FG_ROOT, files })
         const notice = `项目自定义工作流（${projectFlowOf(FG_ROOT)}）不合格：不是合法 JSON；先用内置 · 前端`
-        expect(seen.toasts.filter(i => i === `小小黎：${notice}`)).toHaveLength(1)
+        expect(seen.toasts.filter(i => i === `小黎：${notice}`)).toHaveLength(1)
         await clock.advance(1)
-        expect((await runCommand($, 'refresh')).text).toBe(`小小黎：已刷新，待办 3 条；工作流：${notice}`)
-        expect(seen.toasts.filter(i => i === `小小黎：${notice}`)).toHaveLength(1)
+        expect((await runCommand($, 'refresh')).text).toBe(`小黎：已刷新，待办 3 条；工作流：${notice}`)
+        expect(seen.toasts.filter(i => i === `小黎：${notice}`)).toHaveLength(1)
         expect(String((await callWorkflow($, { action: 'get', kind: 'story' })).result).split('\n')[1]).toBe(`注意：项目自定义工作流（${projectFlowOf(FG_ROOT)}）不合格：不是合法 JSON`)
     })
 
@@ -3771,11 +3819,11 @@ describe('0.6.0：工种与工作流', () => {
     test('/xiaoxiaoli role：不带参数回当前工种与可选项，带参数直接改（中文名或 id），认不出、取不到全局根目录都不写；用法里有 role', async ($, on) => {
         const global = globalFilesOf(FG_ROOT)
         const { seen, files } = await boot($, on, { cwd: FG_ROOT, files: { [global.config]: JSON.stringify(GLOBAL_CONFIG) } })
-        expect((await runCommand($, 'role')).text).toBe('小小黎：工种：前端（没设，按前端）；本项目生效的工作流：内置 · 前端；可选 前端、后端、Python、测试、产品、其他，改用 /xiaoxiaoli role <工种>')
-        expect((await runCommand($, 'role 运维')).text).toBe('小小黎：没改，工种只能是 前端、后端、Python、测试、产品、其他（或 frontend、backend、python、test、product、other）')
+        expect((await runCommand($, 'role')).text).toBe('小黎：工种：前端（没设，按前端）；本项目生效的工作流：内置 · 前端；可选 前端、后端、Python、测试、产品、其他，改用 /xiaoxiaoli role <工种>')
+        expect((await runCommand($, 'role 运维')).text).toBe('小黎：没改，工种只能是 前端、后端、Python、测试、产品、其他（或 frontend、backend、python、test、product、other）')
         expect(seen.written).toEqual([])
         expect((await runCommand($, 'role backend')).text).toBe(
-            `小小黎：已改，工种：后端，从下一条新开工的条目起按内置 · 后端的工作流，进行中的条目不受影响（写入 ${PROFILE_PATH}）`
+            `小黎：已改，工种：后端，从下一条新开工的条目起按内置 · 后端的工作流，进行中的条目不受影响（写入 ${PROFILE_PATH}）`
         )
         /* 0.8.0 起默认档案还记着 tour: done，只改工种时原样保留 */
         expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual({ version: 1, skipped: true, tour: 'done', role: 'backend' })
@@ -3786,21 +3834,21 @@ describe('0.6.0：工种与工作流', () => {
 
     test('/xiaoxiaoli role 取不到全局根目录：不写，如实说', async ($, on) => {
         const { seen } = await boot($, on, { globalRoot: null })
-        expect((await runCommand($, 'role 后端')).text).toBe(`小小黎：没改，${NO_GLOBAL_ROOT_TEXT}，工种存不了，没有写入`)
+        expect((await runCommand($, 'role 后端')).text).toBe(`小黎：没改，${NO_GLOBAL_ROOT_TEXT}，工种存不了，没有写入`)
         expect(seen.written).toEqual([])
     })
 
     test('setup 工具带 role：只给工种、名字与工种一起给、工种认不出；结果写明工种从哪条起生效', async ($, on) => {
         const global = globalFilesOf(FG_ROOT)
         const { files } = await boot($, on, { cwd: FG_ROOT, files: { [global.config]: JSON.stringify(GLOBAL_CONFIG) }, profile: null })
-        expect((await callSetup($, { role: '运维' })).deny).toBe('小小黎：参数不对，工种只能是 前端、后端、Python、测试、产品、其他（或 frontend、backend、python、test、product、other），没有写入')
+        expect((await callSetup($, { role: '运维' })).deny).toBe('小黎：参数不对，工种只能是 前端、后端、Python、测试、产品、其他（或 frontend、backend、python、test、product、other），没有写入')
         expect(String((await callSetup($, { role: 'test' })).result)).toBe(
             `工种：测试，从下一条新开工的条目起按内置 · 测试的工作流，进行中的条目不受影响（已写入 ${PROFILE_PATH}）`
         )
         expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual({ version: 1, role: 'test' })
         const both = await callSetup($, { name: '小美', role: '后端' })
         expect(String(both.result)).toBe(
-            `工作台现在叫 小美AI工作台；工种：后端，从下一条新开工的条目起按内置 · 后端的工作流，进行中的条目不受影响（已写入 ${PROFILE_PATH}；面板标题、提示前缀与 TAPD 评论署名已换成新名字）`
+            `工作台现在叫 小美AI工作台；工种：后端，从下一条新开工的条目起按内置 · 后端的工作流，进行中的条目不受影响（已写入 ${PROFILE_PATH}；工作面板标题栏、提示前缀与 TAPD 评论署名已换成新名字）`
         )
         expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual({ version: 1, name: '小美', role: 'backend' })
         expect(String((await callWorkflow($, { action: 'get' })).result).startsWith('来源：内置 · 后端（')).toBe(true)
@@ -3812,13 +3860,13 @@ describe('0.7.0：通用配置与项目差异', () => {
     const callProject = ($: Engine, args: Record<string, unknown>) => $.tool.call({ tool: 'mcp__xiaoxiaoli__project', ...args } as unknown as ToolCallArgs)
     const global = globalFilesOf(FG_ROOT)
     /** 本项目不用 TAPD 时 refresh 的回复 */
-    const TAPD_OFF_REPLY = '小小黎：本项目记着不用 TAPD（systems.tapd 为 false），不列 TAPD 项目、不拉待办，进行中区照常；要用时对 AI 说「这个项目用 TAPD」'
+    const TAPD_OFF_REPLY = '小黎：本项目记着不用 TAPD（systems.tapd 为 false），不列 TAPD 项目、不拉待办，进行中区照常；要用时对 AI 说「这个项目用 TAPD」'
     const configOf = (files: Record<string, string>) => JSON.parse(files[global.config] ?? '{}') as Record<string, unknown>
 
     test('开工消息与启动命令里的通用资料目录：两处一起给并说明项目的优先；三种启动命令都把开工提示放在 --add-dir 之前，各目录一个 --add-dir', () => {
         expect(resourceDirsText('D:/data', 'D:/shared')).toBe('通用资料目录 D:/shared，项目资料目录 D:/data（两处都有的以项目的为准）')
         expect(resourceDirsText('D:/data', '')).toBe('项目资料目录 D:/data')
-        const tail = `${GLOBAL_GUIDE}；${workflowGuide('story')}；通用资料目录 D:/shared，项目资料目录 D:/data（两处都有的以项目的为准）；TAPD 评论署名 ——小小黎AI工作台`
+        const tail = `${GLOBAL_GUIDE}；${workflowGuide('story')}；通用资料目录 D:/shared，项目资料目录 D:/data（两处都有的以项目的为准）；TAPD 评论署名 ——小黎AI工作台`
         expect(submitText({ longId: STORY_A, dataDir: 'D:/data', sharedDir: 'D:/shared' })).toBe(`开工 ${STORY_A}（${tail}）`)
         expect(submitText({ longId: STORY_A, dataDir: '', sharedDir: 'D:/shared' })).toBe(`开工 ${STORY_A}`)
         const worktree = 'D:/work/demo-1000102'
@@ -3893,19 +3941,19 @@ describe('0.7.0：通用配置与项目差异', () => {
             shared: { path: SHARED, existList: [{ file: 'resources.md', isExist: true }, { file: 'secrets.env', isExist: false }] },
             data: { path: global.dir, existList: [{ file: 'resources.md', isExist: false }, { file: 'secrets.env', isExist: false }] },
             workflowLabel: '内置 · 测试',
-            fullName: '小小黎AI工作台',
+            fullName: '小黎AI工作台',
             role: { title: '测试', isDefault: false }
         }
         expect(projectSummaryText(base).split('\n')).toEqual([
             '项目：fg-demo（没设显示名，用目录名）',
             `项目目录：${FG_ROOT}`,
             `项目配置：${global.config}`,
-            'TAPD：没绑；本项目记着不用 TAPD（systems.tapd 为 false），面板不列 TAPD 项目、不拉待办',
+            'TAPD：没绑；本项目记着不用 TAPD（systems.tapd 为 false），工作面板不列 TAPD 项目、不拉待办',
             '用到的系统：tapd 不用',
             `通用资料目录：${SHARED}（resources.md 有，secrets.env 没有）`,
             `项目资料目录：${global.dir}（resources.md 没有，secrets.env 没有）；两处都有的以项目的为准`,
             '工作流：内置 · 测试',
-            '工作台：小小黎AI工作台；工种：测试'
+            '工作台：小黎AI工作台；工种：测试'
         ])
         const repo = projectSummaryText({ ...base, isRepoMode: true, systems: {}, data: null, shared: null, tapd: { name: '演示项目', id: WS } })
         expect(repo).toContain('TAPD：已绑「演示项目」（90000001）\n用到的系统：项目内模式不支持显示名与 systems')
@@ -3949,7 +3997,7 @@ describe('0.7.0：通用配置与项目差异', () => {
         expect((await runCommand($, 'refresh')).text).toBe(TAPD_OFF_REPLY)
         expect(seen.calls).toEqual([])
         const bound = await callBind($, { project: '演示项目' })
-        expect(String(bound.result)).toBe(`已把本项目（fg-demo）绑定到 TAPD 项目「演示项目」（${WS}），写入 ${global.config}；本项目原来记着不用 TAPD，已改回用；面板马上刷新待办`)
+        expect(String(bound.result)).toBe(`已把本项目（fg-demo）绑定到 TAPD 项目「演示项目」（${WS}），写入 ${global.config}；本项目原来记着不用 TAPD，已改回用；工作面板马上刷新待办`)
         expect(configOf(files).systems).toEqual({ tapd: true, yuque: true })
         await clock.advance(1)
         expect(await rowOf(ui, `todo:${STORY_A}`)).toBeGreaterThan(0)
@@ -3967,13 +4015,13 @@ describe('0.7.0：通用配置与项目差异', () => {
         expect(await textsOf(ui)).toContain('需 9990001 演示-商家端-示例模块')
         expect(String((await callProgress($, { id: '9990001', step: 'unit', status: 'doing' })).result)).toContain('第 7 步 单测中')
         const restored = await callProject($, { action: 'set', systems: { tapd: null } })
-        expect(String(restored.result)).toBe(`已更新本项目配置（${global.config}）：显示名没设（用目录名 fg-demo）；用到的系统：没记（没写的系统都按用到处理）；面板恢复拉 TAPD`)
+        expect(String(restored.result)).toBe(`已更新本项目配置（${global.config}）：显示名没设（用目录名 fg-demo）；用到的系统：没记（没写的系统都按用到处理）；工作面板恢复拉 TAPD`)
         expect(configOf(files).systems).toBeUndefined()
         await clock.advance(1)
         expect(seen.calls.filter(i => i.tool === 'get_todo').length).toBeGreaterThan(0)
         expect(await rowOf(ui, `todo:${STORY_A}`)).toBeGreaterThan(0)
         const off = await callProject($, { action: 'set', systems: { tapd: false } })
-        expect(String(off.result)).toContain('；本项目不用 TAPD，面板不列 TAPD 项目、不拉待办（还绑着「演示项目」，绑定没动）')
+        expect(String(off.result)).toContain('；本项目不用 TAPD，工作面板不列 TAPD 项目、不拉待办（还绑着「演示项目」，绑定没动）')
         await clock.advance(1)
         expect(await textsOf(ui)).toContain(TAPD_OFF_LINES[0])
         await ui.unmount()
@@ -3997,12 +4045,12 @@ describe('0.7.0：通用配置与项目差异', () => {
             `通用资料目录：${SHARED}（resources.md 有，secrets.env 没有）`,
             `项目资料目录：${global.dir}（resources.md 没有，secrets.env 有）；两处都有的以项目的为准`,
             '工作流：内置 · 前端',
-            '工作台：小小黎AI工作台；工种：前端（没设，按前端）',
+            '工作台：小黎AI工作台；工种：前端（没设，按前端）',
             /* 0.8.0 起概况末尾多一行体检与演练（默认档案记着演练已走过，这里没有 env.json） */
             '体检与演练：还没体检过；演练已走过（输入 /xiaoxiaoli tour 可以再走一遍，顺带重新体检）'
         ].join('\n')
         expect(String((await callProject($, { action: 'get' })).result)).toBe(expected)
-        expect((await runCommand($, 'project')).text).toBe(`小小黎：本项目概况\n${expected}`)
+        expect((await runCommand($, 'project')).text).toBe(`小黎：本项目概况\n${expected}`)
         expect(seen.reads.filter(i => /\/(resources\.md|secrets\.env)$/.test(i))).toEqual([])
         expect((await runCommand($, 'nonsense')).text).toContain(' · project 看本项目的配置概况（显示名、TAPD、用到的系统、资料目录）')
     })
@@ -4027,14 +4075,14 @@ describe('0.7.0：通用配置与项目差异', () => {
     test('project 工具 set 的失败：参数不对、写文件失败都如实拒绝，不写入', async ($, on) => {
         const { seen } = await boot($, on, { cwd: FG_ROOT, files: { [global.config]: JSON.stringify(GLOBAL_CONFIG) }, writeDenied: true })
         const deny = async (args: Record<string, unknown>) => (await callProject($, { action: 'set', ...args })).deny
-        expect(await deny({})).toBe('小小黎：参数不对，displayName 与 systems 至少给一个，没有写入')
-        expect(await deny({ displayName: '一二三四五六七八九十一二三四五六七八九十甲' })).toBe('小小黎：参数不对，displayName 最多 20 个字符，现在是 21 个，没有写入')
-        expect(await deny({ displayName: '甲\n乙' })).toBe('小小黎：参数不对，displayName 不能含换行、制表等控制字符，没有写入')
-        expect(await deny({ systems: { Bad: true } })).toBe('小小黎：参数不对，systems 的键「Bad」要是小写字母开头、只含小写字母、数字与 - 的文字，最多 32 个字符，没有写入')
-        expect(await deny({ systems: { tapd: 'no' } })).toBe('小小黎：参数不对，systems.tapd 只能是 true（用）、false（不用）或 null（去掉，回到没说），没有写入')
-        expect((await callProject($, { action: 'del' })).deny).toBe('小小黎：参数不对，action 只能是 get、set，没有写入')
+        expect(await deny({})).toBe('小黎：参数不对，displayName 与 systems 至少给一个，没有写入')
+        expect(await deny({ displayName: '一二三四五六七八九十一二三四五六七八九十甲' })).toBe('小黎：参数不对，displayName 最多 20 个字符，现在是 21 个，没有写入')
+        expect(await deny({ displayName: '甲\n乙' })).toBe('小黎：参数不对，displayName 不能含换行、制表等控制字符，没有写入')
+        expect(await deny({ systems: { Bad: true } })).toBe('小黎：参数不对，systems 的键「Bad」要是小写字母开头、只含小写字母、数字与 - 的文字，最多 32 个字符，没有写入')
+        expect(await deny({ systems: { tapd: 'no' } })).toBe('小黎：参数不对，systems.tapd 只能是 true（用）、false（不用）或 null（去掉，回到没说），没有写入')
+        expect((await callProject($, { action: 'del' })).deny).toBe('小黎：参数不对，action 只能是 get、set，没有写入')
         const failed = String(await deny({ displayName: '演示前端' }))
-        expect(failed.startsWith(`小小黎：写 ${global.config} 失败（`)).toBe(true)
+        expect(failed.startsWith(`小黎：写 ${global.config} 失败（`)).toBe(true)
         expect(failed.endsWith('），没有写入')).toBe(true)
         expect(seen.written).toEqual([])
     })
@@ -4043,7 +4091,7 @@ describe('0.7.0：通用配置与项目差异', () => {
         const files = { [CONFIG_FILE]: JSON.stringify({ ...CONFIG, displayName: '不认的名字', systems: { tapd: false } }) }
         const { clock, seen } = await boot($, on, { files })
         expect((await callProject($, { action: 'set', displayName: '演示' })).deny).toBe(
-            `小小黎：本项目用项目内配置 ${CONFIG_FILE}，显示名与 systems 只存在全局项目目录，项目内模式不支持，没有写入`
+            `小黎：本项目用项目内配置 ${CONFIG_FILE}，显示名与 systems 只存在全局项目目录，项目内模式不支持，没有写入`
         )
         const summary = String((await callProject($, { action: 'get' })).result)
         expect(summary).toContain('项目：demo（没设显示名，用目录名）')
@@ -4060,7 +4108,7 @@ describe('0.7.0：通用配置与项目差异', () => {
 
     test('取不到全局根目录：set 如实拒绝；get 说明通用资料目录没有', async ($, on) => {
         const { seen } = await boot($, on, { globalRoot: null })
-        expect((await callProject($, { action: 'set', systems: { yuque: false } })).deny).toBe(`小小黎：${NO_GLOBAL_ROOT_TEXT}，没有写入`)
+        expect((await callProject($, { action: 'set', systems: { yuque: false } })).deny).toBe(`小黎：${NO_GLOBAL_ROOT_TEXT}，没有写入`)
         expect(String((await callProject($, { action: 'get' })).result)).toContain('通用资料目录：取不到用户目录，没有')
         expect(seen.written).toEqual([])
     })
@@ -4068,7 +4116,7 @@ describe('0.7.0：通用配置与项目差异', () => {
     test('解绑保留显示名与 systems', async ($, on) => {
         const files = { [global.config]: JSON.stringify({ ...GLOBAL_CONFIG, displayName: '演示前端', systems: { yuque: false } }) }
         await boot($, on, { cwd: FG_ROOT, files })
-        expect((await runCommand($, 'unbind')).text?.startsWith('小小黎：已解除本项目（fg-demo）')).toBe(true)
+        expect((await runCommand($, 'unbind')).text?.startsWith('小黎：已解除本项目（fg-demo）')).toBe(true)
         expect(configOf(files)).toEqual({ displayName: '演示前端', systems: { yuque: false } })
     })
 
@@ -4081,7 +4129,7 @@ describe('0.7.0：通用配置与项目差异', () => {
         await startFromPane(ui, STORY_B)
         expect(seen.written).toEqual([global.state, `${SHARED}/README.md`, global.state])
         expect(files[`${SHARED}/README.md`]).toBe(SHARED_README_TEXT)
-        expect(SHARED_README_TEXT).toContain('小小黎AI工作台 mod 不读这两个文件的内容')
+        expect(SHARED_README_TEXT).toContain('AI 工作台的工作面板（插件 xiaoxiaoli）不读这两个文件的内容')
         expect(seen.copied[0]).toContain(`--add-dir '${SHARED}'`)
         await ui.unmount()
     })
@@ -4210,7 +4258,7 @@ describe('0.8.0：体检与演练', () => {
         const order = ['演练脚本：', '\n\n总规则\n', '\n\n第一部分 体检\n', '\n\n第二部分 走流程（共 11 个环节，按顺序）\n', '\n\n第三部分 功能点', '\n\n收尾\n', '\n\n本项目概况\n']
         const indexList = order.map(i => script.indexOf(i))
         expect(indexList.every((n, i) => n >= 0 && (i === 0 || n > (indexList[i - 1] ?? 0)))).toBe(true)
-        expect(script).toContain(`演示条目：ID demo，面板进行中区的「${DEMO_TITLE}」，已记到本会话。进入一个环节时调 mcp__xiaoxiaoli__progress（id 传 demo，step 传步骤键，status 传 doing）`)
+        expect(script).toContain(`演示条目：ID demo，工作面板进行中区的「${DEMO_TITLE}」，已记到本会话。进入一个环节时调 mcp__xiaoxiaoli__progress（id 传 demo，step 传步骤键，status 传 doing）`)
         expect(script).toContain('最后一个环节（tapd）做完传 status=done（工具还没加载时先用 ToolSearch 查 select:mcp__xiaoxiaoli__progress）')
         expect(script).toContain('演练工具就是 mcp__xiaoxiaoli__guide：体检做完传 action=check 与 results')
         expect(script).toContain(`各项目通用的记进通用资料目录 ${SHARED}；只属于本项目的记进项目资料目录 D:/data/demo；两处都有的以项目的为准`)
@@ -4298,7 +4346,7 @@ describe('0.8.0：体检与演练', () => {
         expect(plain.split('\n')).toHaveLength(5)
         expect(plain).not.toContain('mcp__xiaoxiaoli__guide')
         const tour = tourPrompt().split('\n')
-        expect(tour[0]).toBe('走一遍演练（来自工作台面板的「走一遍演练」或 /xiaoxiaoli tour），按下面做：')
+        expect(tour[0]).toBe('走一遍演练（来自工作面板的「走一遍演练」或 /xiaoxiaoli tour），按下面做：')
         expect(tour[1]?.startsWith('1. 调 mcp__xiaoxiaoli__guide，action 传 start')).toBe(true)
         expect(tour[2]).toContain('调 mcp__xiaoxiaoli__guide（action 传 finish）收尾，告诉我以后输入 /xiaoxiaoli tour 可以再来')
     })
@@ -4337,7 +4385,7 @@ describe('0.8.0：体检与演练', () => {
         expect(texts.some(i => i.includes(' demo '))).toBe(false)
         const folded = buildBoard(boardInput({ progress: progressOf({ ...demo, sessionId: OTHER_SESSION }) }), 60).map(lineText)
         expect(folded.some(i => i.startsWith(`演 ${DEMO_TITLE} · 拉取 TAPD`))).toBe(true)
-        expect(statusText([demo], SESSION_ID, true)).toBe('小小黎 · 演练 第 1 步 拉取 TAPD 中')
+        expect(statusText([demo], SESSION_ID, true)).toBe('小黎 · 演练 第 1 步 拉取 TAPD 中')
         const env = { checkedAt: UPDATED, missingList: ['Figma', '三方库文档'], skippedList: ['语雀'] }
         const withEnv = buildBoard(boardInput({ env }), 60)
         const envLine = lineText(withEnv[HEADER_ROW + 1] as BoardLineType)
@@ -4431,7 +4479,7 @@ describe('0.8.0：体检与演练', () => {
     test('进度工具推进演示条目：id 传 demo 照常推进与设等待，面板标「等你」；还没 start 时不能新建 demo', async ($, on) => {
         const { clock, files } = await boot($, on)
         expect((await callProgress($, { id: 'demo', title: '自己建', step: 'fetch', status: 'doing' })).deny).toBe(
-            '小小黎：state.json 里没有演示条目 demo，要先调 mcp__xiaoxiaoli__guide（action 传 start）建，没有写入'
+            '小黎：state.json 里没有演示条目 demo，要先调 mcp__xiaoxiaoli__guide（action 传 start）建，没有写入'
         )
         expect(files[STATE_FILE]).toBeUndefined()
         await callGuide($, { action: 'start' })
@@ -4469,13 +4517,13 @@ describe('0.8.0：体检与演练', () => {
     test('guide 工具的参数与结果不对：如实拒绝、不写入；env.json 版本比本 mod 新时不覆盖', async ($, on) => {
         const newer = JSON.stringify({ version: 2, checkedAt: 'x', results: {} })
         const { seen, files } = await boot($, on, { files: { [CONFIG_FILE]: JSON.stringify(CONFIG), [ENV_PATH]: newer } })
-        expect((await callGuide($, { action: 'go' })).deny).toBe('小小黎：参数不对，action 只能是 start、check、finish，没有写入')
-        expect((await callGuide($, { action: 'check' })).deny).toBe('小小黎：参数不对，check 要给 results 对象，如 { "tapd": "ok", "figma": "missing" }，没有写入')
+        expect((await callGuide($, { action: 'go' })).deny).toBe('小黎：参数不对，action 只能是 start、check、finish，没有写入')
+        expect((await callGuide($, { action: 'check' })).deny).toBe('小黎：参数不对，check 要给 results 对象，如 { "tapd": "ok", "figma": "missing" }，没有写入')
         expect((await callGuide($, { action: 'check', results: { foo: 'ok', tapd: 'yes' } })).deny).toBe(
-            '小小黎：results 里没有可记的结果（键要是依赖清单里的 id：tapd、li-yuque-skills、chrome-devtools、figma、context7、git、node、uv；值只能是 ok、missing、skipped），没有写入'
+            '小黎：results 里没有可记的结果（键要是依赖清单里的 id：tapd、li-yuque-skills、chrome-devtools、figma、context7、git、node、uv；值只能是 ok、missing、skipped），没有写入'
         )
-        expect((await callGuide($, { action: 'finish', summary: 1 })).deny).toBe('小小黎：参数不对，summary 要是文字，没有写入')
-        expect((await callGuide($, { action: 'check', results: { tapd: 'ok' } })).deny).toBe(`小小黎：${ENV_PATH} 是更新版本的 mod 写的，先更新 mod，没有写入`)
+        expect((await callGuide($, { action: 'finish', summary: 1 })).deny).toBe('小黎：参数不对，summary 要是文字，没有写入')
+        expect((await callGuide($, { action: 'check', results: { tapd: 'ok' } })).deny).toBe(`小黎：${ENV_PATH} 是更新版本的 mod 写的，先更新 mod，没有写入`)
         expect(files[ENV_PATH]).toBe(newer)
         expect(seen.written).toEqual([])
     })
@@ -4483,17 +4531,17 @@ describe('0.8.0：体检与演练', () => {
     test('依赖清单 guide/deps.json 不能用：start 照常、脚本里说明跳过体检；check 如实拒绝', async ($, on) => {
         const { seen } = await boot($, on, { guides: { deps: '{坏' } })
         expect(String((await callGuide($, { action: 'start' })).result)).toContain('依赖清单 guide/deps.json 不能用（不是合法 JSON），这次跳过体检，不调 check，直接进入第二部分')
-        expect((await callGuide($, { action: 'check', results: { tapd: 'ok' } })).deny).toBe('小小黎：依赖清单 guide/deps.json 不能用（不是合法 JSON），体检结果对不上，没有写入')
+        expect((await callGuide($, { action: 'check', results: { tapd: 'ok' } })).deny).toBe('小黎：依赖清单 guide/deps.json 不能用（不是合法 JSON），体检结果对不上，没有写入')
         expect(seen.written).toEqual([STATE_FILE])
     })
 
     test('写文件失败：start 不建演示条目、check 不记，都如实拒绝并带原因', async ($, on) => {
         await boot($, on, { writeDenied: true })
         const start = String((await callGuide($, { action: 'start' })).deny)
-        expect(start.startsWith(`小小黎：写 ${STATE_FILE} 失败（`)).toBe(true)
+        expect(start.startsWith(`小黎：写 ${STATE_FILE} 失败（`)).toBe(true)
         expect(start.endsWith('），没有建演示条目')).toBe(true)
         const check = String((await callGuide($, { action: 'check', results: { tapd: 'ok' } })).deny)
-        expect(check.startsWith(`小小黎：写 ${ENV_PATH} 失败（`)).toBe(true)
+        expect(check.startsWith(`小黎：写 ${ENV_PATH} 失败（`)).toBe(true)
         expect(check.endsWith('），没有写入')).toBe(true)
     })
 
@@ -4501,10 +4549,10 @@ describe('0.8.0：体检与演练', () => {
         const { files } = await boot($, on, { globalRoot: null })
         expect(String((await callGuide($, { action: 'start' })).result)).toContain('取不到用户目录，没有通用资料目录')
         expect(parseProgress(files[STATE_FILE] ?? '').taskList.map(i => i.id)).toEqual(['demo'])
-        expect((await callGuide($, { action: 'check', results: { tapd: 'ok' } })).deny).toBe(`小小黎：${NO_GLOBAL_ROOT_TEXT}，体检结果存不了，没有写入`)
+        expect((await callGuide($, { action: 'check', results: { tapd: 'ok' } })).deny).toBe(`小黎：${NO_GLOBAL_ROOT_TEXT}，体检结果存不了，没有写入`)
         expect(String((await callGuide($, { action: 'finish' })).result)).toBe(`已移除演示条目（写入 ${STATE_FILE}）；演练走过没记下：${NO_GLOBAL_ROOT_TEXT}`)
         expect(parseProgress(files[STATE_FILE] ?? '').taskList).toEqual([])
-        expect((await callGuide($, { action: 'finish' })).deny).toBe(`小小黎：演练走过没记下：${NO_GLOBAL_ROOT_TEXT}，没有写入`)
+        expect((await callGuide($, { action: 'finish' })).deny).toBe(`小黎：演练走过没记下：${NO_GLOBAL_ROOT_TEXT}，没有写入`)
     })
 
     test('guide finish：移除演示条目，在 profile.json 记 tour: done、tourAt 与小结（别的字段保留），面板演练引导不再出；没有演示条目也照样记', async ($, on) => {
@@ -4514,13 +4562,13 @@ describe('0.8.0：体检与演练', () => {
         expect(await rowOf(ui, ACTION_TOUR_START)).toBe(HEADER_ROW)
         await callGuide($, { action: 'start' })
         expect(String((await callGuide($, { action: 'finish', summary: '缺 Figma，其余就绪' })).result)).toBe(
-            `已移除演示条目（写入 ${STATE_FILE}）；已记下演练走过与小结（写入 ${PROFILE_PATH}），面板上不再出演练引导`
+            `已移除演示条目（写入 ${STATE_FILE}）；已记下演练走过与小结（写入 ${PROFILE_PATH}），工作面板上不再出演练引导`
         )
         expect(parseProgress(files[STATE_FILE] ?? '').taskList).toEqual([])
         expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual({ version: 1, name: '小美', theme: 'dark', tour: 'done', tourAt: AFTER_ISO, tourSummary: '缺 Figma，其余就绪' })
         expect(await rowOf(ui, ACTION_TOUR_START)).toBe(-1)
         expect((await linesOf(ui))[HEADER_ROW]?.action).toBe(ACTION_REFRESH)
-        expect(String((await callGuide($, { action: 'finish' })).result)).toBe(`已记下演练走过（写入 ${PROFILE_PATH}），面板上不再出演练引导`)
+        expect(String((await callGuide($, { action: 'finish' })).result)).toBe(`已记下演练走过（写入 ${PROFILE_PATH}），工作面板上不再出演练引导`)
         expect((JSON.parse(files[PROFILE_PATH] ?? '') as { tourSummary?: string }).tourSummary).toBeUndefined()
         await ui.unmount()
     })
@@ -4531,14 +4579,14 @@ describe('0.8.0：体检与演练', () => {
         const ui = await mountPane($)
         await click(ui, 5, await rowOf(ui, ACTION_TOUR_START))
         expect(seen.submitted).toEqual([{ text: tourPrompt(), asUser: true }])
-        expect(seen.toasts.at(-1)).toBe('小小黎：已发出：走一遍演练')
+        expect(seen.toasts.at(-1)).toBe('小黎：已发出：走一遍演练')
         expect(seen.written).toEqual([])
         await $.turn.start({ text: '在忙', turnId: 't1' })
         await click(ui, 5, await rowOf(ui, ACTION_TOUR_START))
-        expect(seen.toasts.at(-1)).toBe('小小黎：会话正忙，已排队：走一遍演练')
+        expect(seen.toasts.at(-1)).toBe('小黎：会话正忙，已排队：走一遍演练')
         await click(ui, 5, await rowOf(ui, ACTION_TOUR_SKIP))
         expect(JSON.parse(files[PROFILE_PATH] ?? '')).toEqual({ version: 1, skipped: true, tour: 'declined', tourAt: AFTER_ISO })
-        expect(seen.toasts.at(-1)).toBe('小小黎：好的，不走演练，面板上不再提示；以后想走输入 /xiaoxiaoli tour')
+        expect(seen.toasts.at(-1)).toBe('小黎：好的，不走演练，工作面板上不再提示；以后想走输入 /xiaoxiaoli tour')
         expect(await rowOf(ui, ACTION_TOUR_START)).toBe(-1)
         expect((await linesOf(ui))[HEADER_ROW]?.action).toBe(ACTION_REFRESH)
         await ui.post({ type: 'row', action: ACTION_TOUR_SKIP }, { in: 'board' })
@@ -4550,11 +4598,11 @@ describe('0.8.0：体检与演练', () => {
 
     test('/xiaoxiaoli tour：排到下一拍发出演练那段话（走过演练的也能再走）；带参数时提示不带；用法里有 tour', async ($, on) => {
         const { clock, seen } = await boot($, on)
-        expect((await runCommand($, 'tour')).text).toBe('小小黎：已发出：走一遍演练')
+        expect((await runCommand($, 'tour')).text).toBe('小黎：已发出：走一遍演练')
         expect(seen.submitted).toEqual([])
         await clock.advance(1)
         expect(seen.submitted).toEqual([{ text: tourPrompt(), asUser: true }])
-        expect((await runCommand($, 'tour 现在')).text).toBe('小小黎：tour 不带参数')
+        expect((await runCommand($, 'tour 现在')).text).toBe('小黎：tour 不带参数')
         expect((await runCommand($, 'nonsense')).text).toContain(' · tour 让 AI 带你走一遍演练（体检本机环境、按工作流模拟走一遍、讲功能点）')
         expect(seen.submitted).toHaveLength(1)
     })
@@ -4562,9 +4610,9 @@ describe('0.8.0：体检与演练', () => {
     test('演练脚本 guide/tour.json 不能用：tour 命令、面板按钮与 start 都如实说不能用、不发不建；设置引导里不问演练', async ($, on) => {
         const { clock, seen, files } = await boot($, on, { profile: null, guides: { tour: '[]' } })
         const why = '演练脚本 guide/tour.json 不能用（要是一个 JSON 对象）'
-        expect((await runCommand($, 'tour')).text).toBe(`小小黎：${why}，没有发起演练`)
-        expect((await callGuide($, { action: 'start' })).deny).toBe(`小小黎：${why}，没有建演示条目`)
-        expect((await runCommand($, 'setup')).text).toBe('小小黎：已发出：设置工作台')
+        expect((await runCommand($, 'tour')).text).toBe(`小黎：${why}，没有发起演练`)
+        expect((await callGuide($, { action: 'start' })).deny).toBe(`小黎：${why}，没有建演示条目`)
+        expect((await runCommand($, 'setup')).text).toBe('小黎：已发出：设置工作台')
         await clock.advance(1)
         expect(seen.submitted).toEqual([{ text: setupPrompt({ name: '', isUnbound: false, projectName: 'demo' }), asUser: true }])
         await runCommand($, 'name 小美')
@@ -4619,7 +4667,7 @@ describe('0.9.0：自动更新', () => {
     const NOTES = ['插件市场安装', '每天自动更新']
     /** 插件市场安装时的插件目录（Windows 写法） */
     const MARKET_ROOT = 'C:\\Users\\a\\.claude\\plugins\\cache\\xiaoli-mods\\xiaoxiaoli\\0.8.0'
-    const OPTIONS = { subject: '工作台', from: '0.8.0', to: '0.9.0', noteList: NOTES }
+    const OPTIONS = { subject: '工作面板', from: '0.8.0', to: '0.9.0', noteList: NOTES }
     const MANUAL = 'claude plugin marketplace update xiaoli-mods，再运行 claude plugin update xiaoxiaoli@xiaoli-mods'
     const STEPS = [
         ['claude', 'plugin', 'marketplace', 'update', 'xiaoli-mods'],
@@ -4647,7 +4695,7 @@ describe('0.9.0：自动更新', () => {
         let now = 1000
         const ports: UpdatePortsType = {
             mod: MOD,
-            subject: '工作台',
+            subject: '工作面板',
             root: world.root ?? MARKET_ROOT,
             today: TODAY,
             readCheckedDay: async () => world.stored,
@@ -4756,17 +4804,17 @@ describe('0.9.0：自动更新', () => {
 
     test('提示文字：成功说从哪个版本到哪个、要点与怎么生效（发起了重载时说正在重新加载）；失败给原因与手动命令；本地目录加载说 git pull', () => {
         expect(updatedNotice(OPTIONS, true)).toEqual({
-            toast: '工作台已从 0.8.0 更新到 0.9.0（更新要点见对话里的记录）；正在重新加载插件，马上生效；没生效就输入 /reload-plugins，或下次开会话自动生效',
-            log: '工作台已从 0.8.0 更新到 0.9.0，更新要点：\n- 插件市场安装\n- 每天自动更新\n正在重新加载插件，马上生效；没生效就输入 /reload-plugins，或下次开会话自动生效'
+            toast: '工作面板已从 0.8.0 更新到 0.9.0（更新要点见对话里的记录）；正在重新加载插件，马上生效；没生效就输入 /reload-plugins，或下次开会话自动生效',
+            log: '工作面板已从 0.8.0 更新到 0.9.0，更新要点：\n- 插件市场安装\n- 每天自动更新\n正在重新加载插件，马上生效；没生效就输入 /reload-plugins，或下次开会话自动生效'
         })
         expect(updatedNotice({ ...OPTIONS, noteList: [] }, false)).toEqual({
-            toast: '工作台已从 0.8.0 更新到 0.9.0；输入 /reload-plugins 立即生效，或下次开会话自动生效',
-            log: '工作台已从 0.8.0 更新到 0.9.0\n输入 /reload-plugins 立即生效，或下次开会话自动生效'
+            toast: '工作面板已从 0.8.0 更新到 0.9.0；输入 /reload-plugins 立即生效，或下次开会话自动生效',
+            log: '工作面板已从 0.8.0 更新到 0.9.0\n输入 /reload-plugins 立即生效，或下次开会话自动生效'
         })
-        expect(failedNotice(OPTIONS, '退出码 1', MANUAL).toast).toBe(`工作台发现新版 0.9.0（当前 0.8.0），自动更新没成功（退出码 1）；不影响继续使用，可以手动运行 ${MANUAL}，下次开会话也会再试`)
+        expect(failedNotice(OPTIONS, '退出码 1', MANUAL).toast).toBe(`工作面板发现新版 0.9.0（当前 0.8.0），自动更新没成功（退出码 1）；不影响继续使用，可以手动运行 ${MANUAL}，下次开会话也会再试`)
         expect(localNotice(OPTIONS)).toEqual({
-            toast: '工作台发现新版 0.9.0（当前 0.8.0）；本机是从本地目录加载的，不自动更新；到仓库目录运行 git pull 即可',
-            log: '工作台发现新版 0.9.0（当前 0.8.0），更新要点：\n- 插件市场安装\n- 每天自动更新\n本机是从本地目录加载的，不自动更新；到仓库目录运行 git pull 即可'
+            toast: '工作面板发现新版 0.9.0（当前 0.8.0）；本机是从本地目录加载的，不自动更新；到仓库目录运行 git pull 即可',
+            log: '工作面板发现新版 0.9.0（当前 0.8.0），更新要点：\n- 插件市场安装\n- 每天自动更新\n本机是从本地目录加载的，不自动更新；到仓库目录运行 git pull 即可'
         })
     })
 
@@ -4907,8 +4955,8 @@ describe('0.9.0：自动更新', () => {
                 { url: RAW_MANIFEST, init: undefined },
                 { url: RAW_CHANGELOG, init: undefined }
             ])
-            expect(seen.toasts).toContain(`小小黎：${localNotice(OPTIONS).toast}`)
-            expect(seen.logs).toContain(`小小黎：${localNotice(OPTIONS).log}`)
+            expect(seen.toasts).toContain(`小黎：${localNotice(OPTIONS).toast}`)
+            expect(seen.logs).toContain(`小黎：${localNotice(OPTIONS).log}`)
             expect(outcomeOf(seen.logs)).toEqual(['自动更新：local-notified'])
             expect(ranList).toEqual([])
         })
