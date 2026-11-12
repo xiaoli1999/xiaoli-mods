@@ -390,7 +390,7 @@ start 返回的脚本按顺序：开头几行（演示条目与进度怎么报�
 开工消息：
 
 - 项目内模式：`开工 <长 ID>`，流程由项目内文档约定。
-- 全局模式（项目里没有流程文档）：`开工 <长 ID>（按 xiaoli-workflow 技能的流程执行，用 mcp__xiaoxiaoli__progress 推进进度；项目内有 docs/xiaoli/workflow.md 时以项目内文档为准；先调 mcp__xiaoxiaoli__workflow 取本项目工作流（kind 传 story），按它的步骤、细则与「先问」走，进度用它的步骤键，其余照技能的通用规则；通用资料目录 <全局根>/shared，项目资料目录 <全局项目目录>（两处都有的以项目的为准）；TAPD 评论署名 ——<工作台全称>）`。缺陷的 kind 传 `bug`。全称默认「小小黎AI工作台」，起了名按名字（见「起名与首次引导」）。新会话启动命令里的开工提示同样带取工作流的一句、两个资料目录与署名。`xiaoli-workflow` 技能在本仓库的 `skills/xiaoli-workflow`。
+- 全局模式（项目里没有流程文档）：`开工 <长 ID>（按 xiaoli-workflow 技能（随工作台插件安装时名为 xiaoxiaoli:xiaoli-workflow）的流程执行，用 mcp__xiaoxiaoli__progress 推进进度；项目内有 docs/xiaoli/workflow.md 时以项目内文档为准；先调 mcp__xiaoxiaoli__workflow 取本项目工作流（kind 传 story），按它的步骤、细则与「先问」走，进度用它的步骤键，其余照技能的通用规则；通用资料目录 <全局根>/shared，项目资料目录 <全局项目目录>（两处都有的以项目的为准）；TAPD 评论署名 ——<工作台全称>）`。缺陷的 kind 传 `bug`。全称默认「小小黎AI工作台」，起了名按名字（见「起名与首次引导」）。新会话启动命令里的开工提示同样带取工作流的一句、两个资料目录与署名。`xiaoli-workflow` 技能随工作台插件一起装，在本 mod 的 `skills/xiaoli-workflow`，会话里叫 `xiaoxiaoli:xiaoli-workflow`（插件自带的技能带插件名前缀，插件市场安装与本地目录加载都一样）；以前自己复制到 `~/.claude/skills/xiaoli-workflow` 的叫 `xiaoli-workflow`，所以开工消息两种叫法都写上。
 
 「手上的条目」：`sessionId` 是当前会话的；没记 `sessionId` 的旧条目归主工作区的会话。这条规则三处一致：主工作区的会话里，旧条目在进行中区展开、开工分流算本会话的、状态行显示；worktree 里的会话把它折成一行、分流不算、状态行不显示。
 

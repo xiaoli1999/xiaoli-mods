@@ -1734,8 +1734,9 @@ describe('全局模式：项目键与全局目录', () => {
         const dataDir = 'C:\\Users\\a\\.claude\\xiaoxiaoli\\projects\\demo-1a2b3c4d'
         const flowStory = '先调 mcp__xiaoxiaoli__workflow 取本项目工作流（kind 传 story），按它的步骤、细则与「先问」走，进度用它的步骤键，其余照技能的通用规则'
         expect(submitText({ longId: STORY_A, dataDir: '' })).toBe(`开工 ${STORY_A}`)
+        /* 0.9.0 起技能随工作台插件安装，名字是 xiaoxiaoli:xiaoli-workflow，两种叫法都写上 */
         expect(submitText({ longId: STORY_A, dataDir })).toBe(
-            `开工 ${STORY_A}（按 xiaoli-workflow 技能的流程执行，用 mcp__xiaoxiaoli__progress 推进进度；项目内有 docs/xiaoli/workflow.md 时以项目内文档为准；${flowStory}；项目资料目录 ${dataDir}；TAPD 评论署名 ——小小黎AI工作台）`
+            `开工 ${STORY_A}（按 xiaoli-workflow 技能（随工作台插件安装时名为 xiaoxiaoli:xiaoli-workflow）的流程执行，用 mcp__xiaoxiaoli__progress 推进进度；项目内有 docs/xiaoli/workflow.md 时以项目内文档为准；${flowStory}；项目资料目录 ${dataDir}；TAPD 评论署名 ——小小黎AI工作台）`
         )
         const root = 'D:\\work\\demo'
         const worktree = worktreeOf(root, '1000102')

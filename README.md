@@ -6,7 +6,7 @@
 | --- | --- |
 | `mods/xiaoke` | 小黎：趴在输入框上的陪伴猫。提示词缓存保活、看模型与思考强度、token 与额度预估、概括当前在做的事、定点久坐喝水提醒；按钮栏的「干活 / 收工」开关小小黎面板 |
 | `mods/xiaoxiaoli` | 小小黎 AI 工作台：AI 工作流的载体。侧栏拉取并展示 TAPD 待办，点「开工」才开工；按「步骤 → 任务 → 模块」显示进度，AI 用 `mcp__xiaoxiaoli__progress` 推进。在任何项目里都能用，没绑定 TAPD 的项目问一次就记住。详见 [mods/xiaoxiaoli/README.md](mods/xiaoxiaoli/README.md) |
-| `skills/xiaoli-workflow` | 通用 AI 开发流程：TAPD 需求 11 个环节、缺陷 6 步、必须先问的动作与 Git 规则。Claude Code、Codex 等都能用 |
+| `mods/xiaoxiaoli/skills/xiaoli-workflow` | 通用 AI 开发流程（随工作台插件一起装，会话里叫 `xiaoxiaoli:xiaoli-workflow`）：TAPD 需求 11 个环节、缺陷 6 步、必须先问的动作与 Git 规则。Claude Code、Codex 等都能用 |
 
 目录名沿用各自的标识：`mods/xiaoke`（陪伴猫小黎）、`mods/xiaoxiaoli`（小小黎 AI 工作台）。命令：猫是 `/xiaoli`（如 `/xiaoli keep on|off` 开关缓存保活、`/xiaoli rest` 休息 2 分钟），工作台是 `/xiaoxiaoli` 与 `mcp__xiaoxiaoli__*`。旧命令 `/xiaoke` 仍可用。
 
@@ -32,10 +32,10 @@
    ```
 
    已经装过同名 mod（如 `~/.claude/mods/xiaoxiaoli`）时，把原来那一项换成本仓库的，不要两份并存。
-3. skill：把 `skills/xiaoli-workflow` 整个目录复制或链接到 `~/.claude/skills/xiaoli-workflow`；Codex 用户放到 `~/.agents/skills/xiaoli-workflow`。链接的好处是 `git pull` 后直接生效，Windows 可用目录联接（不需要管理员）：
+3. skill：随工作台一起加载，不用另装；不用 Claude Code 的把 `mods/xiaoxiaoli/skills/xiaoli-workflow` 整个目录复制或链接到 `~/.claude/skills/xiaoli-workflow`；Codex 用户放到 `~/.agents/skills/xiaoli-workflow`。链接的好处是 `git pull` 后直接生效，Windows 可用目录联接（不需要管理员）：
 
    ```
-   cmd /c mklink /J "%USERPROFILE%\.claude\skills\xiaoli-workflow" "<仓库>\skills\xiaoli-workflow"
+   cmd /c mklink /J "%USERPROFILE%\.claude\skills\xiaoli-workflow" "<仓库>\mods\xiaoxiaoli\skills\xiaoli-workflow"
    ```
 
 ## 首次使用
@@ -60,7 +60,7 @@
 
 ## 非前端同事怎么改
 
-面板和进度是通用的，流程写在 skill 里。改 `skills/xiaoli-workflow/SKILL.md` 的环节即可：
+面板和进度是通用的，流程写在 skill 里。改 `mods/xiaoxiaoli/skills/xiaoli-workflow/SKILL.md` 的环节即可：
 
 - 改第 2 节总表和第 3 节细则：比如后端把「浏览器自测」换成接口自测，测试把「开发」换成写用例、执行用例。
 - 环节的键（`fetch` … `release`、缺陷的 `screenshot` … `verify`）是面板认的步骤，不要改键名和个数；面板上显示的步骤名固定在 `mods/xiaoxiaoli/hooks/workbench.ts` 的 `STORY_STEPS`、`BUG_STEPS`，要改显示名改那里。

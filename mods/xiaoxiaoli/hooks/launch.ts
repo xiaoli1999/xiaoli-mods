@@ -51,9 +51,11 @@ export interface NewSessionPlanType {
     sharedDir?: string
 }
 
+/** 流程技能的名字：随工作台插件装的叫「插件名:技能名」，自己复制到 ~/.claude/skills 的叫技能名，两种都写上，AI 哪种都找得到 */
+export const WORKFLOW_SKILL_TEXT = 'xiaoli-workflow 技能（随工作台插件安装时名为 xiaoxiaoli:xiaoli-workflow）'
+
 /** 全局模式（项目里没有工作台文档）开工时带给 AI 的流程指引 */
-export const GLOBAL_GUIDE =
-    '按 xiaoli-workflow 技能的流程执行，用 mcp__xiaoxiaoli__progress 推进进度；项目内有 docs/xiaoli/workflow.md 时以项目内文档为准'
+export const GLOBAL_GUIDE = `按 ${WORKFLOW_SKILL_TEXT}的流程执行，用 mcp__xiaoxiaoli__progress 推进进度；项目内有 docs/xiaoli/workflow.md 时以项目内文档为准`
 
 /**
  * 跟在流程指引后面的署名说明：让 AI 知道 TAPD 评论末尾署什么名。
