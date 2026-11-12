@@ -1,0 +1,5 @@
+{
+  "name": "xiaoke-local",
+  "owner": { "name": "local" },
+  "plugins": [{ "name": "xiaoke", "source": "./" }]
+}

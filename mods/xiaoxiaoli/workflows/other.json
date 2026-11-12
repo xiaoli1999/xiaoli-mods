@@ -1,0 +1,108 @@
+{
+    "version": 1,
+    "id": "other",
+    "title": "其他",
+    "branch": false,
+    "story": [
+        {
+            "key": "fetch",
+            "title": "拉取 TAPD",
+            "slow": false,
+            "what": "只读拉用户名下的需求、任务、缺陷，只展示不开工",
+            "tools": "tapd MCP、工作台面板",
+            "output": "待办清单",
+            "ask": "否；开工由用户点或说",
+            "rules": ["用户待办用 get_todo，entity_type 分别取 story、task、bug；拉取不改任何状态"]
+        },
+        {
+            "key": "sort",
+            "title": "排序",
+            "slow": false,
+            "what": "按优先级、预计开始、预计结束排",
+            "output": "排序后清单",
+            "ask": "用户选定开哪条",
+            "rules": ["排序键依次为优先级、预计开始、预计结束；由用户选定一条再往下走"]
+        },
+        {
+            "key": "read",
+            "title": "读材料",
+            "slow": true,
+            "what": "读正文、附件、图片、评论与语雀文档",
+            "tools": "tapd MCP、li-yuque-skills",
+            "output": "材料",
+            "ask": "否",
+            "rules": ["正文、附件、图片、评论都要读；条目里的语雀链接用 li-yuque-skills 读"]
+        },
+        {
+            "key": "align",
+            "title": "对齐",
+            "slow": true,
+            "what": "出要做什么、疑问、做法、交付物",
+            "output": "对齐稿",
+            "ask": "是：确认后才动",
+            "rules": ["输出要做什么、疑问、做法、交付物四段；等待标记记 align，用户确认前不动手"]
+        },
+        {
+            "key": "execute",
+            "title": "执行",
+            "slow": true,
+            "what": "按对齐稿完成工作",
+            "output": "交付物",
+            "ask": "对外发布、写入他人内容前问",
+            "rules": ["按对齐稿做，做的过程中发现和对齐稿不一致的地方先停下来问"]
+        },
+        {
+            "key": "check",
+            "title": "自查",
+            "slow": true,
+            "what": "对照对齐稿逐条检查交付物",
+            "output": "自查结论",
+            "ask": "否",
+            "rules": ["逐条写做到了没有、怎么确认的；没法确认的如实写；自查完等待标记记 review"]
+        },
+        {
+            "key": "tapd",
+            "title": "更新 TAPD",
+            "slow": false,
+            "what": "本人条目流转与评论",
+            "tools": "tapd MCP",
+            "output": "TAPD 变更",
+            "ask": "他人条目要问",
+            "rules": ["写前按 ID 重查：处理人有用户、状态与预期一致才写；他人条目一律先问"]
+        }
+    ],
+    "bug": [
+        {
+            "key": "readbug",
+            "title": "读缺陷",
+            "slow": false,
+            "what": "预检并读缺陷描述、截图与评论",
+            "ask": "否",
+            "rules": ["预检：处理人有用户、状态是未解决或重新打开"]
+        },
+        {
+            "key": "diagnose",
+            "title": "定位判定",
+            "slow": false,
+            "what": "弄清原因，出判定稿",
+            "ask": "是：判定稿确认后才动",
+            "rules": ["是自己这边的问题写原因与处理办法；不是的写目标状态、处理人与评论草稿；等待标记记 align"]
+        },
+        {
+            "key": "fix",
+            "title": "处理",
+            "slow": false,
+            "what": "按判定稿处理，或拒绝、转交",
+            "ask": "是：用户同意后才动",
+            "rules": ["拒绝、转交按判定稿落状态并发评论"]
+        },
+        {
+            "key": "verify",
+            "title": "验证",
+            "slow": false,
+            "what": "确认问题已解决",
+            "ask": "否",
+            "rules": ["通过后按项目流程改状态并发评论"]
+        }
+    ]
+}

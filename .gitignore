@@ -1,0 +1,12 @@
+node_modules/
+
+# 密钥与本地环境文件不进仓库
+secrets.env
+.env*.local
+
+# 系统、编辑器与日志
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
