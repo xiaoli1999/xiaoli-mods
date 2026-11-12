@@ -3,7 +3,7 @@
   "owner": {
     "name": "xiao li"
   },
-  "description": "小黎 mods：陪伴猫小克与小小黎 AI 工作台两个 Claude Code mod",
+  "description": "小黎 mods：装好得到「小黎AI工作台」（名字可改），由陪伴猫小克与右侧的工作面板两个 Claude Code mod 组成",
   "plugins": [
     {
       "name": "xiaoke",
@@ -13,7 +13,7 @@
     {
       "name": "xiaoxiaoli",
       "source": "./mods/xiaoxiaoli",
-      "description": "小小黎 AI 工作台：侧栏拉取 TAPD 待办、点「开工」按工种工作流推进、三级进度；自带 xiaoli-workflow 开发流程 skill"
+      "description": "工作面板：AI 工作台右侧那块，拉取 TAPD 待办、点「开工」按工种工作流推进、三级进度，标题栏显示「<名字>AI工作台」（默认小黎）；自带 xiaoli-workflow 开发流程 skill"
     }
   ]
 }
