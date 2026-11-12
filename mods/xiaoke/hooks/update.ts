@@ -1,5 +1,5 @@
 /**
- * @description 自动更新：两个 mod（陪伴猫 xiaoke、工作台 xiaoxiaoli）各放一份同样的这个文件，逻辑相同。
+ * @description 自动更新：两个 mod（陪伴猫 xiaoke、工作面板 xiaoxiaoli）各放一份同样的这个文件，逻辑相同。
  * 纯函数：取版本与更新要点的两个地址、语义化版本比较（只认正式版本）、从 CHANGELOG.md 截出某个版本的要点、
  * 按插件目录判断是插件市场安装还是本地目录加载、今天查过没有、更新命令、失败原因与给用户看的提示文字。
  * 流程 runUpdateCheck 不碰引擎：联网、运行命令、读写 $.store 与环境变量都由各自的 register.tsx 经 UpdatePortsType 传进来，便于测试
@@ -250,7 +250,7 @@ const notesBlock = (noteList: readonly string[]): string[] => noteList.map(note 
 
 /** 提示文字的参数 */
 export interface NoticeOptionsType {
-    /** 提示开头的主语，如「工作台」；不要时传 '' */
+    /** 提示开头的主语，如「工作面板」；不要时传 '' */
     subject: string
     /** 当前版本 */
     from: string

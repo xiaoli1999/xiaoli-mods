@@ -1,6 +1,6 @@
 # 陪伴猫小克（xiaoke）
 
-小黎 mods 里的一个 Claude Code mod：陪伴猫小克，一只像素小猫趴在输入框上方，实时围观 Claude 干活、点它互动；顺带显示主对话的模型与思考强度、token 与额度预估，定点提醒久坐和喝水，还会给提示词缓存保活。`xiaoke` 既是它的名字，也是插件标识：目录 `mods/xiaoke`、插件名 `xiaoke`、命令 `/xiaoke` 都是它。
+小黎 mods 里的一个 Claude Code mod，和右侧的工作面板（`mods/xiaoxiaoli`）一起组成「<名字>AI工作台」：陪伴猫小克，一只像素小猫趴在输入框上方，实时围观 Claude 干活、点它互动；顺带显示主对话的模型与思考强度、token 与额度预估，定点提醒久坐和喝水，还会给提示词缓存保活。`xiaoke` 既是它的名字，也是插件标识：目录 `mods/xiaoke`、插件名 `xiaoke`、命令 `/xiaoke` 都是它。
 
 ## 安装
 
@@ -32,7 +32,7 @@ claude plugin install xiaoke@xiaoli-mods
 
 | 按钮 | 作用 |
 | --- | --- |
-| 干活 / 收工 | 开关小小黎 AI 工作台的侧栏：按「干活」把环境变量 `XIAOXIAOLI_PANE` 设成 `show` 并运行 `/xiaoxiaoli show`，变成「收工」；再按设成 `hide`。工作台那边改了这个变量，这里下一秒跟上 |
+| 干活 / 收工 | 开关 AI 工作台右侧的工作面板（插件 xiaoxiaoli）：按「干活」把环境变量 `XIAOXIAOLI_PANE` 设成 `show` 并运行 `/xiaoxiaoli show`，变成「收工」；再按设成 `hide`。工作面板那边改了这个变量，这里下一秒跟上 |
 | 摸摸头、喂饼干、夸夸我 | 互动：小克换表情说一句；摸头好感加 1、喂饼干加 2，「状态」卡片里看好感、认识第几天、一起完成几轮 |
 | 悄悄话 | 让小克看着你此刻的状态说一句：调一次 haiku，花费显示在状态卡片里 |
 | 安静一会 | 切换安静模式（同 `/xiaoke quiet`） |
@@ -98,7 +98,7 @@ claude plugin install xiaoke@xiaoli-mods
 
 - 成功查过一次（不论有没有新版）当天就不再查，日期记在 `$.store` 的 `updateCheckedDay`；断网等取不到的情况不记，同一天下次开会话再试。`claude -p`、SDK 等非交互式会话与热重载不查。
 - 怎么判断是插件市场安装：插件目录在 Claude Code 的插件缓存里，即 `<插件根>/cache/<市场名>/xiaoke/<版本>/`（插件根默认 `~/.claude/plugins`），市场名就取这一段；其余都按本地目录加载处理。
-- 和小小黎 AI 工作台同时更新时，两个 mod 经进程环境变量 `XIAOLI_MODS_UPDATING` 错开，经 `XIAOLI_MODS_RELOAD_AT` 只重载一次。
+- 和工作面板同时更新时，两个 mod 经进程环境变量 `XIAOLI_MODS_UPDATING` 错开，经 `XIAOLI_MODS_RELOAD_AT` 只重载一次。
 - 不提供关闭开关。Claude Code 自己的网络限制（如组织的联网策略）拦下请求时按取不到处理。
 
 ## 安全边界
@@ -116,4 +116,4 @@ claude plugin install xiaoke@xiaoli-mods
 claude plugin test <仓库>\mods\xiaoke
 ```
 
-测试里的时钟、存储、网络与命令全是造的，不真的联网、不运行 `claude`。`hooks/update.ts` 与小小黎 AI 工作台里的同名文件是同一份，改一处要两边一起改。
+测试里的时钟、存储、网络与命令全是造的，不真的联网、不运行 `claude`。`hooks/update.ts` 与工作面板（`mods/xiaoxiaoli`）里的同名文件是同一份，改一处要两边一起改。

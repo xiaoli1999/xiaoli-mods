@@ -156,7 +156,7 @@ const aiCost = atom({ plugin: 'xiaoke', key: 'aiCost' } as const, { calls: 0, in
 const aiLast = atom({ plugin: 'xiaoke', key: 'aiLast' } as const, '还没调用过')
 /** 今天的开工时间：今天最早开的会话（跨会话共享，存在 $.store 的 workDay） */
 const workStart = atom({ plugin: 'xiaoke', key: 'workStart' } as const, 0)
-/** 小小黎侧栏开关：每秒从环境变量 XIAOXIAOLI_PANE 同步，决定开关按钮显示「干活」还是「收工」 */
+/** 工作面板的开关：每秒从环境变量 XIAOXIAOLI_PANE 同步，决定开关按钮显示「干活」还是「收工」 */
 const workbenchPane = atom({ plugin: 'xiaoke', key: 'workbenchPane' } as const, 'hide')
 /** 缓存保活：计时、开关和本会话今天的次数（/xiaoke keep on|off） */
 const keep = atom({ plugin: 'xiaoke', key: 'keep' } as const, NEW_KEEP)
@@ -568,7 +568,7 @@ async function runKeep($: Dollar, t: number): Promise<void> {
   if (settled.isKept && !quiet) await speak($, L.fill(L.pick(L.KEEP_DONE), { n: settled.next.count }), 'happy')
 }
 
-/** 每秒对一下小小黎侧栏的开关：用户可能用 /xiaoxiaoli、面板的关闭键等别的方式开关过 */
+/** 每秒对一下工作面板的开关：用户可能用 /xiaoxiaoli、工作面板的关闭键等别的方式开关过 */
 async function syncWorkbench($: Dollar): Promise<void> {
   try {
     const pane = (await $.env.get('XIAOXIAOLI_PANE')) === 'show' ? 'show' : 'hide'
@@ -730,22 +730,22 @@ async function press($: Dollar, key: ActionKey): Promise<void> {
   else await onToggleExpand($)
 }
 
-/** 干活 / 收工开关：切到另一侧，先改按钮文字再通知小小黎，不等下一跳 */
+/** 干活 / 收工开关：切到另一侧，先改按钮文字再通知工作面板，不等下一跳 */
 async function onWorkToggle($: Dollar): Promise<void> {
   const value = (await read($, workbenchPane)) === 'show' ? 'hide' : 'show'
   await update($, workbenchPane, () => value)
   await setWorkbench($, value)
 }
 
-/** 干活 / 收工：写进程环境变量 XIAOXIAOLI_PANE，小小黎每 0.5 秒轮询一次，据此打开或收起它的侧栏 */
+/** 干活 / 收工：写进程环境变量 XIAOXIAOLI_PANE，工作面板每 0.5 秒轮询一次，据此打开或收起 */
 async function setWorkbench($: Dollar, value: 'show' | 'hide'): Promise<void> {
   await $.env.set('XIAOXIAOLI_PANE', value)
   if (value !== 'show') return
-  // 再走一次 /xiaoxiaoli show，让面板算作用户请求打开，不受 144 列门槛限制
+  // 再走一次 /xiaoxiaoli show，让工作面板算作用户请求打开，不受 144 列门槛限制
   try {
     await $.command.run({ command: 'xiaoxiaoli', args: 'show' })
   } catch {
-    // 小小黎未加载时忽略
+    // 工作面板未加载时忽略
   }
 }
 
@@ -835,7 +835,7 @@ async function readText($: Dollar, path: string): Promise<string> {
 }
 
 /**
- * 自动更新要用的外部能力（流程见 hooks/update.ts 的 runUpdateCheck，和工作台同一份）：只 GET 两个公开地址、不带请求头；
+ * 自动更新要用的外部能力（流程见 hooks/update.ts 的 runUpdateCheck，和工作面板同一份）：只 GET 两个公开地址、不带请求头；
  * 只运行 claude plugin marketplace update 与 claude plugin update 两条命令；两个 mod 经进程环境变量 XIAOLI_MODS_UPDATING 错开更新，
  * 经 XIAOLI_MODS_RELOAD_AT 只发起一次 /reload-plugins
  */
