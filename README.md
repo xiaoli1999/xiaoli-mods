@@ -1,15 +1,15 @@
 # 小黎 mods（xiaoli-mods）
 
-小黎的 AI 工作流沉淀。「小黎 mods」是总称，里面是两个 Claude Code mod：陪伴猫「小黎」和小小黎 AI 工作台；工作台自带一个通用的开发流程 skill。猫和作者同名，需要区分时，猫这边就叫「小黎 mods」。
+小黎的 AI 工作流沉淀。「小黎 mods」是这套东西（仓库、安装包）的总称，里面是两个 Claude Code mod：陪伴猫「小克」和小小黎 AI 工作台；工作台自带一个通用的开发流程 skill。
 
 | 目录 | 是什么 |
 | --- | --- |
-| `mods/xiaoke` | 陪伴猫小黎：趴在输入框上方陪你干活。提示词缓存保活、看模型与思考强度、token 与额度预估、概括当前在做的事、定点久坐喝水提醒；按钮栏的「干活 / 收工」开关工作台面板。详见 [mods/xiaoke/README.md](mods/xiaoke/README.md) |
+| `mods/xiaoke` | 陪伴猫小克（`xiaoke` 既是它的名字，也是插件标识）：趴在输入框上方陪你干活。提示词缓存保活、看模型与思考强度、token 与额度预估、概括当前在做的事、定点久坐喝水提醒；按钮栏的「干活 / 收工」开关工作台面板。详见 [mods/xiaoke/README.md](mods/xiaoke/README.md) |
 | `mods/xiaoxiaoli` | 小小黎 AI 工作台：AI 工作流的载体。侧栏拉取并展示 TAPD 待办，点「开工」才开工；按工种走不同的工作流，按「步骤 → 任务 → 模块」显示进度。在任何项目里都能用，没绑定 TAPD 的项目问一次就记住。详见 [mods/xiaoxiaoli/README.md](mods/xiaoxiaoli/README.md) |
 | `mods/xiaoxiaoli/skills/xiaoli-workflow` | 通用 AI 开发流程 skill：TAPD 需求各环节、缺陷 6 步、必须先问的动作与 Git 规则。随工作台一起装，会话里叫 `xiaoxiaoli:xiaoli-workflow`；不用 Claude Code 的也能单独用 |
 | `.claude-plugin/marketplace.json` | 插件市场清单：市场名 `xiaoli-mods`，列出上面两个 mod |
 
-命令：猫是 `/xiaoli`（如 `/xiaoli keep on|off` 开关缓存保活、`/xiaoli rest` 休息 2 分钟，旧命令 `/xiaoke` 仍可用），工作台是 `/xiaoxiaoli` 与 `mcp__xiaoxiaoli__*` 工具。
+命令：猫是 `/xiaoke`（如 `/xiaoke keep on|off` 开关缓存保活、`/xiaoke rest` 休息 2 分钟），工作台是 `/xiaoxiaoli` 与 `mcp__xiaoxiaoli__*` 工具。
 
 ## 前置条件
 
