@@ -4721,6 +4721,8 @@ describe('0.9.0：自动更新', () => {
         expect(changelogNotes('## [v0.9.0] - 2026-11-13\r\n* 甲\r\n- 乙\r\n  - 丙\r\n## 0.8.0\r\n- 丁', '0.9.0')).toEqual(['甲', '乙', '丙'])
         expect(changelogNotes(['## 0.9.0', '- 1', '- 2', '- 3', '- 4', '- 5', '- 6'].join('\n'), '0.9.0')).toEqual(['1', '2', '3', '4', '5'])
         expect(changelogNotes('## 0.9.0', '0.9.0', 2)).toEqual([])
+        /* 提示是纯文字：去掉行内代码的反引号与加粗 */
+        expect(changelogNotes('## 0.9.0\n- 装 `xiaoxiaoli@xiaoli-mods`，**马上**生效', '0.9.0')).toEqual(['装 xiaoxiaoli@xiaoli-mods，马上生效'])
         /* 0.9.0 不会误配到 0.9.01 或 10.9.0 */
         expect(changelogNotes('## 10.9.0\n- 错\n## 0.9.01\n- 也错', '0.9.0')).toEqual([])
     })

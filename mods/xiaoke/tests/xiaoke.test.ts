@@ -1601,6 +1601,7 @@ describe('0.5.0：自动更新', () => {
     expect(changelogNotes(CHANGELOG, '0.5.0')).toEqual(NOTES)
     expect(changelogNotes(CHANGELOG, '0.4.0')).toEqual([])
     expect(changelogNotes('', '0.5.0')).toEqual([])
+    expect(changelogNotes('## 0.5.0\n- 装 `xiaoke@xiaoli-mods`', '0.5.0')).toEqual(['装 xiaoke@xiaoli-mods'])
   })
 
   test('安装方式与一天一查：插件缓存 cache/<市场名>/xiaoke/<版本> 下为插件市场安装，仓库目录为本地目录加载；$.store 记着今天为查过', () => {

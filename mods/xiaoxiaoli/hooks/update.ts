@@ -129,7 +129,8 @@ const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/
 
 /**
  * 从 CHANGELOG.md 截出某个版本那一节的要点：找「## <版本号>」开头的标题（版本号前可带 v、可加方括号，后面可跟日期等），
- * 取它到下一个「# 」「## 」标题之间以「- 」或「* 」开头的行，最多 limit 条。没有这一节、文字为空时为空数组。
+ * 取它到下一个「# 」「## 」标题之间以「- 」或「* 」开头的行，最多 limit 条；提示是纯文字，去掉行内代码的反引号与加粗的 **。
+ * 没有这一节、文字为空时为空数组。
  * @param text CHANGELOG.md 原文
  * @param version 版本号，如 0.9.0
  * @param limit 最多几条
@@ -147,7 +148,7 @@ export const changelogNotes = (text: string, version: string, limit: number = NO
     const noteList: string[] = []
     for (const line of lineList.slice(start + 1)) {
         if (/^#{1,2}\s/.test(line.trim())) break
-        const bullet = /^\s*[-*]\s+(.+)$/.exec(line)?.[1]?.trim()
+        const bullet = /^\s*[-*]\s+(.+)$/.exec(line)?.[1]?.replace(/`|\*\*/g, '').trim()
         if (bullet) noteList.push(bullet)
         if (noteList.length >= limit) break
     }
