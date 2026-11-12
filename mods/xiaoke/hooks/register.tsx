@@ -1,4 +1,4 @@
-// 小黎：趴在输入框上方的陪伴形象。实时围观 Claude 干活、点击互动、预估 token 与额度。
+// 小克：趴在输入框上方的陪伴形象。实时围观 Claude 干活、点击互动、预估 token 与额度。
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, TextProps } from 'claude-code'
 
@@ -57,14 +57,14 @@ const PRESS_FLASH_MS = 1200
 const CARD_AUTO_CLOSE_MS = 20_000
 /** 开心、担心等情绪保持多久后回落 */
 const MOOD_HOLD_MS = 20_000
-/** 斜杠命令：主命令 /xiaoli，旧命令 /xiaoke 保留可用，两个同一套说明和处理 */
+/** 斜杠命令 /xiaoke 的说明与参数提示 */
 const COMMAND_HELP =
   '切换工作/放松模式（rest 休息，quiet 切换安静、quiet on/off 安静开关，ai on/off 每轮结束自动说话（不影响悄悄话），keep on/off 缓存保活（默认一直保活到会话关闭，keep max 小时数|off 设或取消上限），calibrate 点击校准，hide 隐藏，show 显示）'
 const COMMAND_HINT =
   '[rest|quiet|quiet on|quiet off|ai on|ai off|keep|keep on|keep off|keep max <小时>|keep max off|calibrate|hide|show]'
-/** 手动 /xiaoli rest 休息 2 分钟（久坐、喝水是定点强提醒，时间表和时长见 remind.ts） */
+/** 手动 /xiaoke rest 休息 2 分钟（久坐、喝水是定点强提醒，时间表和时长见 remind.ts） */
 const MANUAL_REST_MS = 2 * 60_000
-/** 最近这么久没动静（没打字、没对话、没点小黎）就算人不在：到点先不提醒，这个小时内回来再补 */
+/** 最近这么久没动静（没打字、没对话、没点小克）就算人不在：到点先不提醒，这个小时内回来再补 */
 const AWAY_MS = 30 * 60_000
 /** 每隔多久对一下主对话的模型（/model 切换后不用等下一次请求） */
 const MODEL_CHECK_MS = 10_000
@@ -88,7 +88,7 @@ const CARD_BORDER = 'suggestion'
 const QUOTA_ALERTS_KEY = 'quotaAlerts'
 const QUOTA_ALERT_TTL_MS = 5 * 3_600_000
 
-/** 台词颜色跟小黎身体颜色走（与 avatar.tsx 的 BODY_COLOR 保持一致） */
+/** 台词颜色跟小克身体颜色走（与 avatar.tsx 的 BODY_COLOR 保持一致） */
 const MOOD_COLOR: Record<Mood, string> = {
   idle: '#4f8ff7',
   watching: '#22c3d6',
@@ -141,13 +141,13 @@ const lastWhisper = atom({ plugin: 'xiaoke', key: 'lastWhisper' } as const, '')
 const saySeq = atom({ plugin: 'xiaoke', key: 'saySeq' } as const, 0)
 const pressed = atom({ plugin: 'xiaoke', key: 'pressed' } as const, '')
 const openCard = atom({ plugin: 'xiaoke', key: 'openCard' } as const, '')
-/** 点击校准模式（/xiaoli calibrate 开关） */
+/** 点击校准模式（/xiaoke calibrate 开关） */
 const isCalibrating = atom({ plugin: 'xiaoke', key: 'isCalibrating' } as const, false)
 /** 点击口径：终端上报列 = off + Σ(英文 1 列，中文 cjk 列)；正常终端 off 0、cjk 2，校准后跨会话记住 */
 const clickMap = atom({ plugin: 'xiaoke', key: 'clickMap' } as const, { off: 0, cjk: 2 })
 /**
  * 真实台词：每轮结束时自动让 haiku 结合实际发生的事说一句（开始时是零 token 的模板句）；
- * /xiaoli ai on|off 只开关这一项，用户主动点的「悄悄话」不受影响
+ * /xiaoke ai on|off 只开关这一项，用户主动点的「悄悄话」不受影响
  */
 const isAiLines = atom({ plugin: 'xiaoke', key: 'isAiLines' } as const, true)
 /** 真实台词累计花了多少 token */
@@ -158,7 +158,7 @@ const aiLast = atom({ plugin: 'xiaoke', key: 'aiLast' } as const, '还没调用�
 const workStart = atom({ plugin: 'xiaoke', key: 'workStart' } as const, 0)
 /** 小小黎侧栏开关：每秒从环境变量 XIAOXIAOLI_PANE 同步，决定开关按钮显示「干活」还是「收工」 */
 const workbenchPane = atom({ plugin: 'xiaoke', key: 'workbenchPane' } as const, 'hide')
-/** 缓存保活：计时、开关和本会话今天的次数（/xiaoli keep on|off） */
+/** 缓存保活：计时、开关和本会话今天的次数（/xiaoke keep on|off） */
 const keep = atom({ plugin: 'xiaoke', key: 'keep' } as const, NEW_KEEP)
 /** 本会话跑过 session.start 没有：热重载后 $.state 还在，据此认出不是全新启动 */
 const isStarted = atom({ plugin: 'xiaoke', key: 'isStarted' } as const, false)
@@ -174,7 +174,7 @@ let turnBase = 0
 let turnQuotaStart: number | null = null
 let sessionStartedAt = 0
 let lastActiveAt = 0
-/** 上一跳之后有没有打字、点小黎（在 tick 里统一记活跃时间） */
+/** 上一跳之后有没有打字、点小克（在 tick 里统一记活跃时间） */
 let isActiveSinceTick = false
 let lastNowWrite = 0
 /** 本会话已经处理过的提醒整点（'2026-10-15 10'），处理过就不再去读 $.store */
@@ -204,7 +204,7 @@ let workDay = { day: '', at: 0 }
 let keepAlive: KeepAlive = NEW_KEEP
 /** 保活的 $.model.fork 正在路上：这期间的 turn.step 可能是保活自己引起的，不算主对话的真实请求 */
 let isKeepForking = false
-/** 带子最近一次给的高度（行）：点小黎时按实际画出来的样子判断，放不下 4 行就只有小个子 */
+/** 带子最近一次给的高度（行）：点小克时按实际画出来的样子判断，放不下 4 行就只有小个子 */
 let bandRows: number = AVATAR.full.rows
 
 type UsageLike = {
@@ -408,8 +408,8 @@ async function checkAlerts($: Dollar, m: Meter): Promise<void> {
       p: q.percentUsed,
       reset: resetLabel(q.kind, q.resetsAt) || '稍后会恢复',
     })
-    // 安静模式也照常弹 toast：关系到还能不能继续用；只是小黎不开口
-    $.ui.toast(`小黎：${text}`, { timeoutMs: 8000 })
+    // 安静模式也照常弹 toast：关系到还能不能继续用；只是小克不开口
+    $.ui.toast(`小克：${text}`, { timeoutMs: 8000 })
     if (!quiet) await speak($, text, 'worried')
   }
   if (m.ctxPercent === null) return
@@ -477,7 +477,7 @@ async function loadPrefs($: Dollar): Promise<void> {
 /** 每秒一跳：忙碌时刷新计时、情绪回落、卡片自动收起、久坐/喝水提醒（形象动画在 avatar.tsx 里自己跑） */
 async function tick($: Dollar): Promise<void> {
   const t = await $.clock.now()
-  // 打字、点小黎只在这里记一笔活跃时间，避免每次按键都多一次 $ 调用
+  // 打字、点小克只在这里记一笔活跃时间，避免每次按键都多一次 $ 调用
   if (isActiveSinceTick) {
     isActiveSinceTick = false
     lastActiveAt = t
@@ -531,8 +531,8 @@ async function setKeep($: Dollar, next: KeepAlive): Promise<void> {
 /**
  * 缓存保活：主对话最后一次请求后 50 分钟没新请求，就 $.model.fork 旁路请求一次（不进对话历史），
  * 读一遍主对话的缓存把寿命续上；默认不设上限，只要会话开着就一直保活到会话关闭。
- * 来不及、没命中、失败重试后仍失败、或设了上限（/xiaoli keep max）且连续这么久没对话就停下，下次对话或 /xiaoli keep on 后恢复。
- * 安静模式下保活成功不弹 toast、小黎也不开口；失败和停下的 toast 照常弹（用户得知道）
+ * 来不及、没命中、失败重试后仍失败、或设了上限（/xiaoke keep max）且连续这么久没对话就停下，下次对话或 /xiaoke keep on 后恢复。
+ * 安静模式下保活成功不弹 toast、小克也不开口；失败和停下的 toast 照常弹（用户得知道）
  */
 async function runKeep($: Dollar, t: number): Promise<void> {
   const rolled = rollDay(keepAlive, dayKey(t))
@@ -543,7 +543,7 @@ async function runKeep($: Dollar, t: number): Promise<void> {
   }
   if (step.kind === 'stop') {
     await setKeep($, { ...rolled, stopped: step.reason, retryAt: 0 })
-    $.ui.toast(`小黎：${step.reason}，下次对话后恢复`, { timeoutMs: 8000 })
+    $.ui.toast(`小克：${step.reason}，下次对话后恢复`, { timeoutMs: 8000 })
     return
   }
   // 第一个 await 之前就标上 isSending，下一跳不会重复发
@@ -601,7 +601,7 @@ async function remind($: Dollar, t: number): Promise<void> {
     await update($, reminded, () => doneHours(next))
     await startRest($, kind, text, ALERT_MS)
     // 终端通知（按用户自己的通知设置：系统通知或响铃）；发不出去也不影响带子里的提醒
-    void $.ui.notify(text, { title: `小黎 · ${ALERT_STYLE[kind].title}` }).catch(() => undefined)
+    void $.ui.notify(text, { title: `小克 · ${ALERT_STYLE[kind].title}` }).catch(() => undefined)
     return
   }
   await update($, reminded, () => doneHours(log))
@@ -610,7 +610,7 @@ async function remind($: Dollar, t: number): Promise<void> {
   if (t < endsAt && restEndsAt < endsAt) await startRest($, kind, text, endsAt - t)
 }
 
-/** 强提醒：带子展开成醒目的提醒框（就在小黎旁边），倒计时结束前收不回去 */
+/** 强提醒：带子展开成醒目的提醒框（就在小克旁边），倒计时结束前收不回去 */
 async function startRest($: Dollar, kind: RestKind, text: string, durationMs: number): Promise<void> {
   const t = await $.clock.now()
   restEndsAt = t + durationMs
@@ -701,7 +701,7 @@ async function onToggleExpand($: Dollar): Promise<void> {
 }
 
 /**
- * 点小黎本身：工作模式里是展开，放松模式里是摸头。按实际画出来的样子判断：
+ * 点小克本身：工作模式里是展开，放松模式里是摸头。按实际画出来的样子判断：
  * 带子放不下 4 行时只画得出 2 行的小个子，展不开，就说一句提示，不改模式、不加好感
  */
 async function onAvatarClick($: Dollar): Promise<void> {
@@ -782,8 +782,8 @@ async function toggleCard($: Dollar, key: CardKey): Promise<void> {
 }
 
 /**
- * 悄悄话：点一下，小黎看着你此刻的状态主动说一句（走 haiku，花费显示在状态行）。
- * 是用户主动点的，/xiaoli ai off 之后照样调用；只有安静模式下不调模型，直接回一句固定台词（零 token）
+ * 悄悄话：点一下，小克看着你此刻的状态主动说一句（走 haiku，花费显示在状态行）。
+ * 是用户主动点的，/xiaoke ai off 之后照样调用；只有安静模式下不调模型，直接回一句固定台词（零 token）
  */
 async function onWhisper($: Dollar): Promise<void> {
   if (quiet) {
@@ -883,12 +883,12 @@ async function updatePortsOf($: Dollar): Promise<UpdatePortsType> {
         await $.command.run({ command: 'reload-plugins', args: '' })
       } catch (cause) {
         $.ui.log(`自动更新：发起 /reload-plugins 失败：${cause instanceof Error ? cause.message : String(cause)}`, { to: 'debug' })
-        $.ui.toast('小黎：没能自动重新加载插件，输入 /reload-plugins 立即生效，或下次开会话自动生效')
+        $.ui.toast('小克：没能自动重新加载插件，输入 /reload-plugins 立即生效，或下次开会话自动生效')
       }
     },
     notify: async notice => {
-      $.ui.toast(`小黎：${notice.toast}`, { timeoutMs: NOTICE_TIMEOUT_MS })
-      $.ui.log(`小黎：${notice.log}`)
+      $.ui.toast(`小克：${notice.toast}`, { timeoutMs: NOTICE_TIMEOUT_MS })
+      $.ui.log(`小克：${notice.log}`)
     },
     log: text => $.ui.log(`自动更新：${text}`, { to: 'debug' }),
   }
@@ -913,15 +913,10 @@ export const register: Register = on => {
     // 本会话第一次跑 session.start 才算全新启动；热重载再来的看 $.state 认出来
     const isFreshStart = !(await read($, isStarted))
     if (isFreshStart) await update($, isStarted, () => true)
-    // 主命令 /xiaoli；改名前的 /xiaoke 也照样注册，两个走下面同一个 command.run 处理
-    await $.command.register({
-      name: 'xiaoli',
-      description: `小黎：${COMMAND_HELP}`,
-      argumentHint: COMMAND_HINT,
-    })
+    // 命令只有 /xiaoke：猫叫小克，名字和插件标识一致；改名期间加的 /xiaoli 已去掉
     await $.command.register({
       name: 'xiaoke',
-      description: `小黎（旧命令，同 /xiaoli）：${COMMAND_HELP}`,
+      description: `小克：${COMMAND_HELP}`,
       argumentHint: COMMAND_HINT,
     })
     const t = await $.clock.now()
@@ -978,34 +973,34 @@ export const register: Register = on => {
     return result
   })
 
-  // 主命令 /xiaoli 与旧命令 /xiaoke 走同一个处理，行为完全一样
-  on('command.run', { command: ['xiaoli', 'xiaoke'] }, async ($, e) => {
+  // /xiaoke 的处理；/xiaoli 不再注册，也不在这里响应
+  on('command.run', { command: 'xiaoke' }, async ($, e) => {
     const arg = e.args.trim()
     if (arg === 'hide') {
       await update($, isHidden, () => true)
-      return { text: '小黎：那我先躲起来啦，/xiaoli show 随时叫我' }
+      return { text: '小克：那我先躲起来啦，/xiaoke show 随时叫我' }
     }
-    // 只有 show 让藏起来的小黎出来；查状态、开关、打错参数都不顺带取消隐藏
+    // 只有 show 让藏起来的小克出来；查状态、开关、打错参数都不顺带取消隐藏
     if (arg === 'show') {
       await update($, isHidden, () => false)
-      return { text: '小黎：我回来啦～' }
+      return { text: '小克：我回来啦～' }
     }
-    const hiddenNote = (await read($, isHidden)) ? '（我还藏着，/xiaoli show 叫我出来才看得到）' : ''
+    const hiddenNote = (await read($, isHidden)) ? '（我还藏着，/xiaoke show 叫我出来才看得到）' : ''
     if (arg === 'rest') {
       await startRest($, 'manual', L.pick(L.REST_MANUAL), MANUAL_REST_MS)
-      return { text: '小黎：好，休息 2 分钟，到点我自动收起～' }
+      return { text: '小克：好，休息 2 分钟，到点我自动收起～' }
     }
     if (arg === 'calibrate') {
       const isOn = await update($, isCalibrating, v => !v)
       return {
         text: isOn
-          ? `小黎：校准模式开了。先点 [A] 中间的 A，再点 [B] 中间的 B，校准完自动退出；/xiaoli calibrate 也能退出。带子要有 ${AVATAR.full.rows} 行高才画得出 [A][B]，看不到就先把窗口拉高${hiddenNote}`
-          : '小黎：校准模式关了',
+          ? `小克：校准模式开了。先点 [A] 中间的 A，再点 [B] 中间的 B，校准完自动退出；/xiaoke calibrate 也能退出。带子要有 ${AVATAR.full.rows} 行高才画得出 [A][B]，看不到就先把窗口拉高${hiddenNote}`
+          : '小克：校准模式关了',
       }
     }
     if (arg === 'quiet on' || arg === 'quiet off' || arg === 'quiet') {
       await setQuiet($, arg === 'quiet' ? !quiet : arg === 'quiet on')
-      return { text: quiet ? '小黎：好，我安静待着，/xiaoli quiet off 叫我说话' : '小黎：我回来啦，继续陪你说话～' }
+      return { text: quiet ? '小克：好，我安静待着，/xiaoke quiet off 叫我说话' : '小克：我回来啦，继续陪你说话～' }
     }
     if (arg === 'ai on' || arg === 'ai off') {
       const isOn = arg === 'ai on'
@@ -1014,19 +1009,19 @@ export const register: Register = on => {
       const cost = await read($, aiCost)
       return {
         text: isOn
-          ? `小黎：好，每轮结束时我用 haiku 结合这一轮真实发生的事说一句（目前累计 ${cost.calls} 次，入 ${cost.input} / 出 ${cost.output} token）`
+          ? `小克：好，每轮结束时我用 haiku 结合这一轮真实发生的事说一句（目前累计 ${cost.calls} 次，入 ${cost.input} / 出 ${cost.output} token）`
           : // ai off 只关每轮结束的自动台词；悄悄话是用户主动点的，照样调用
-            '小黎：好，每轮结束不再自动说话了（不花 token）；点「悄悄话」仍会调用一次',
+            '小克：好，每轮结束不再自动说话了（不花 token）；点「悄悄话」仍会调用一次',
       }
     }
-    // /xiaoli keep max <小时>|off：可选的保活上限，默认不设；跨会话记住
+    // /xiaoke keep max <小时>|off：可选的保活上限，默认不设；跨会话记住
     const maxArg = /^keep max(?:\s+(.*))?$/.exec(arg)
     if (maxArg !== null) {
       const t = await $.clock.now()
       const hours = parseMaxHours(maxArg[1] ?? '')
       if (hours === null) {
         return {
-          text: `小黎：上限要填 1–72 的整数小时，比如 /xiaoli keep max 12；/xiaoli keep max off 取消上限。现在：${keepLimitNote(keepAlive)}`,
+          text: `小克：上限要填 1–72 的整数小时，比如 /xiaoke keep max 12；/xiaoke keep max off 取消上限。现在：${keepLimitNote(keepAlive)}`,
         }
       }
       await setKeep($, { ...keepAlive, maxHours: hours })
@@ -1034,35 +1029,35 @@ export const register: Register = on => {
       return {
         text:
           hours > 0
-            ? `小黎：好，保活上限设为 ${hours} 小时：连续 ${hours} 小时没对话就停（跨会话记住，/xiaoli keep max off 取消）。${keepStatusLine(keepAlive, t)}`
-            : `小黎：好，保活不设上限了：只要会话开着、保活开着，就一直保活到会话关闭（跨会话记住）。${keepStatusLine(keepAlive, t)}`,
+            ? `小克：好，保活上限设为 ${hours} 小时：连续 ${hours} 小时没对话就停（跨会话记住，/xiaoke keep max off 取消）。${keepStatusLine(keepAlive, t)}`
+            : `小克：好，保活不设上限了：只要会话开着、保活开着，就一直保活到会话关闭（跨会话记住）。${keepStatusLine(keepAlive, t)}`,
       }
     }
     if (arg === 'keep' || arg === 'keep on' || arg === 'keep off') {
       const t = await $.clock.now()
-      if (arg === 'keep') return { text: `小黎：${keepStatusLine(keepAlive, t)}。${keepLimitNote(keepAlive)}` }
+      if (arg === 'keep') return { text: `小克：${keepStatusLine(keepAlive, t)}。${keepLimitNote(keepAlive)}` }
       const isOn = arg === 'keep on'
       // keep on：停下的立刻恢复（见 resumeKeep），回复里的状态句和卡片一致
       await setKeep($, isOn ? resumeKeep(keepAlive, t) : { ...keepAlive, isOn, retryAt: 0 })
       await savePrefs($)
       return {
         text: isOn
-          ? `小黎：缓存保活开了，主对话 50 分钟没请求我就续一下缓存，${keepLimitText(keepAlive)}。${keepStatusLine(keepAlive, t)}`
-          : '小黎：缓存保活关了，/xiaoli keep on 再打开',
+          ? `小克：缓存保活开了，主对话 50 分钟没请求我就续一下缓存，${keepLimitText(keepAlive)}。${keepStatusLine(keepAlive, t)}`
+          : '小克：缓存保活关了，/xiaoke keep on 再打开',
       }
     }
     // 认不出的参数（比如把 rest 打成 reset）只给用法，不误切模式
     if (arg !== '') {
       return {
-        text: `小黎：不认识「${arg}」。用法：/xiaoli 切换工作/放松模式 · /xiaoli rest 休息 2 分钟 · /xiaoli quiet 切换安静模式（quiet on|off 指定开关） · /xiaoli ai on|off 每轮结束自动说话开关（悄悄话不受影响） · /xiaoli keep on|off 缓存保活（/xiaoli keep 看状态；默认一直保活到会话关闭，/xiaoli keep max 小时数|off 设或取消上限） · /xiaoli calibrate 点击校准 · /xiaoli hide 隐藏 · /xiaoli show 显示`,
+        text: `小克：不认识「${arg}」。用法：/xiaoke 切换工作/放松模式 · /xiaoke rest 休息 2 分钟 · /xiaoke quiet 切换安静模式（quiet on|off 指定开关） · /xiaoke ai on|off 每轮结束自动说话开关（悄悄话不受影响） · /xiaoke keep on|off 缓存保活（/xiaoke keep 看状态；默认一直保活到会话关闭，/xiaoke keep max 小时数|off 设或取消上限） · /xiaoke calibrate 点击校准 · /xiaoke hide 隐藏 · /xiaoke show 显示`,
       }
     }
     // 强提醒中：收不回去，撒个娇
     const t = await $.clock.now()
-    if (restEndsAt > t) return { text: `小黎：${L.fill(L.pick(L.REST_STAY), { left: countdown(restEndsAt - t) })}` }
+    if (restEndsAt > t) return { text: `小克：${L.fill(L.pick(L.REST_STAY), { left: countdown(restEndsAt - t) })}` }
     const expanded = await update($, isExpanded, v => !v)
     await savePrefs($)
-    return { text: `${expanded ? '小黎：展开啦' : '小黎：缩小一点陪你'}${hiddenNote}` }
+    return { text: `${expanded ? '小克：展开啦' : '小克：缩小一点陪你'}${hiddenNote}` }
   })
 
   // 打字时实时估算输入框的 token（显示在输入框下方的提示行）
@@ -1205,7 +1200,7 @@ export const register: Register = on => {
     return result
   })
 
-  // Client 发来的消息：avatar 点小黎本身；bubble 点提醒气泡的完成按钮；controls 点胶囊/按钮、或校准结果
+  // Client 发来的消息：avatar 点小克本身；bubble 点提醒气泡的完成按钮；controls 点胶囊/按钮、或校准结果
   on('ui.message', async ($, e, next) => {
     const result = await next(e)
     if (typeof e.data !== 'object' || e.data === null) return result
@@ -1230,18 +1225,18 @@ export const register: Register = on => {
     const met = await read($, meter)
     const fc = forecast(met.ctxTokens ?? 0, n, await read($, turns), fiveHourOf(met))
     const quota = fc.quota === null ? '' : ` · 5h≈+${fc.quota.toFixed(1)}%`
-    return next({ ...e, props: { ...e.props, tail: `小黎：输入≈${fmtTokens(n)} token · 本轮≈${fmtTokens(fc.processed)}${quota}` } })
+    return next({ ...e, props: { ...e.props, tail: `小克：输入≈${fmtTokens(n)} token · 本轮≈${fmtTokens(fc.processed)}${quota}` } })
   })
 
-  // 输入框上方的带子：收起 = 工作模式（2 行极简），展开 = 放松模式（4 行，小黎趴在输入框上）
+  // 输入框上方的带子：收起 = 工作模式（2 行极简），展开 = 放松模式（4 行，小克趴在输入框上）
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const nowMs = await read($, now)
     const restEnd = await read($, restUntil)
     const isResting = restEnd > nowMs
-    // 隐藏时照样弹强提醒：健康提醒不能因为小黎躲起来就看不到
+    // 隐藏时照样弹强提醒：健康提醒不能因为小克躲起来就看不到
     if (!isResting && (await read($, isHidden))) return next(e)
-    // 记下带子高度，点小黎时据此判断实际画的是不是小个子
+    // 记下带子高度，点小克时据此判断实际画的是不是小个子
     bandRows = e.props.maxRows
     const els = $.ui.resolve(e)
     const { Box, Text } = els
@@ -1277,11 +1272,11 @@ export const register: Register = on => {
     const box = AVATAR[size]
     const fc = forecast(met.ctxTokens ?? 0, draftTokens, history, fiveHourOf(met))
     const last = history.at(-1)
-    // 安静模式要看得出来，不然像是小黎坏了不说话；安静时点悄悄话回的那句固定台词要让人看到，不被安静提示盖住
+    // 安静模式要看得出来，不然像是小克坏了不说话；安静时点悄悄话回的那句固定台词要让人看到，不被安静提示盖住
     const bubble = silent
       ? line === L.WHISPER_QUIET
         ? line
-        : '（安静模式中，/xiaoli quiet off 恢复说话）'
+        : '（安静模式中，/xiaoke quiet off 恢复说话）'
       : whispering
         ? L.WHISPER_THINKING
         : line === ''
@@ -1324,8 +1319,8 @@ export const register: Register = on => {
       ...(kept.isOn ? [`保活 ${kept.count} 次`] : []),
     ].join(' · ')
 
-    // 强提醒：小黎旁边的对话气泡（bubble.tsx 自己画、自己判定按钮），倒计时结束前一直在；
-    // 放得下 4 行就是带尾巴的圆角气泡，和小黎一样高；放不下就在 2 行里显示标题、倒计时、按钮和台词
+    // 强提醒：小克旁边的对话气泡（bubble.tsx 自己画、自己判定按钮），倒计时结束前一直在；
+    // 放得下 4 行就是带尾巴的圆角气泡，和小克一样高；放不下就在 2 行里显示标题、倒计时、按钮和台词
     if (isResting) {
       const kind = await read($, restKind)
       const style = ALERT_STYLE[kind]
@@ -1371,7 +1366,7 @@ export const register: Register = on => {
       )
     }
 
-    // 工作模式：2 行。小黎等比缩小一半，没有按钮；第 1 行是小黎说的话（弱化），第 2 行是状态和指标；点小黎本身展开
+    // 工作模式：2 行。小克等比缩小一半，没有按钮；第 1 行是小克说的话（弱化），第 2 行是状态和指标；点小克本身展开
     // 「今天已工作」从今天第一个会话开始累计，不因每次提问重新计时；圆点颜色表示 Claude 此刻在不在干活
     if (!expanded) {
       const doing = act.isBusy
@@ -1500,7 +1495,7 @@ export const register: Register = on => {
         label: upcoming === undefined ? '今天提醒完啦' : upcomingAt,
         card: [
           `今天 ${plan}`,
-          `${upcoming === undefined ? '今天的提醒都结束啦' : `下一次 ${upcomingAt}`} · 到点强提醒 3min，人不在先不弹，只在这个小时内回来才补 · /xiaoli rest 立刻休息 · /xiaoli calibrate 点击校准`,
+          `${upcoming === undefined ? '今天的提醒都结束啦' : `下一次 ${upcomingAt}`} · 到点强提醒 3min，人不在先不弹，只在这个小时内回来才补 · /xiaoke rest 立刻休息 · /xiaoke calibrate 点击校准`,
         ],
       },
       {

@@ -71,7 +71,7 @@ const BAND = {
 
 const COMMAND_ENV = { origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 160 } }
 
-/** 把小黎会碰到的外部名词都接住：存储、时钟、toast */
+/** 把小克会碰到的外部名词都接住：存储、时钟、toast */
 function calmWorld(on: On) {
   mock.store(on)
   mock.clock(on, { now: Date.UTC(2026, 9, 8, 7, 0) })
@@ -159,7 +159,7 @@ describe('点击判定', () => {
 })
 
 describe('工作模式（默认收起）', () => {
-  test('只有 2 行：等比缩小的小黎 + 两行暗色状态，没有任何控件', async ($, on) => {
+  test('只有 2 行：等比缩小的小克 + 两行暗色状态，没有任何控件', async ($, on) => {
     calmWorld(on)
     const ui = await $.ui.mount({ plugin: 'xiaoke', surface: 'terminal', component: 'AbovePrompt', props: BAND })
     const avatar = await ui.find({ type: 'Client', key: 'avatar' })
@@ -193,17 +193,17 @@ describe('工作模式（默认收起）', () => {
     expect(workDayStart(null, midnight - 2 * 3_600_000, now).at).toBe(midnight)
   })
 
-  test('第 1 行是小黎说的话（弱化），第 2 行是状态和指标', async ($, on) => {
+  test('第 1 行是小克说的话（弱化），第 2 行是状态和指标', async ($, on) => {
     calmWorld(on)
     const ui = await $.ui.mount({ plugin: 'xiaoke', surface: 'terminal', component: 'AbovePrompt', props: BAND })
-    // 先展开摸一下头让小黎说句话，再收起
+    // 先展开摸一下头让小克说句话，再收起
     await ui.pointer({ type: 'down', x: 4, y: 0, button: 'left', in: 'avatar' })
     await ui.post({ type: 'control', key: 'pet' }, { in: 'controls' })
     const said = (await ui.find({ type: 'Text', text: /摸|像素|手/ }))?.text
     await ui.post({ type: 'control', key: 'expand' }, { in: 'controls' })
     const line = await ui.find({ type: 'Text', text: said ?? '' })
     expect(line?.props.dimColor).toBe(true)
-    // 刚被摸过头，心情是开心/害羞，台词跟着小黎变粉色
+    // 刚被摸过头，心情是开心/害羞，台词跟着小克变粉色
     expect(line?.props.color).toBe(BODY_COLOR.happy)
     expect(await ui.find({ type: 'Text', text: /下一轮≈/ })).toBeDefined()
     await ui.unmount()
@@ -211,14 +211,14 @@ describe('工作模式（默认收起）', () => {
 
   test('认不出的参数只给用法，不误切模式', async ($, on) => {
     calmWorld(on)
-    const result = await $.command.run({ command: 'xiaoli', args: 'reset', ...COMMAND_ENV })
+    const result = await $.command.run({ command: 'xiaoke', args: 'reset', ...COMMAND_ENV })
     expect(result.text).toContain('不认识「reset」')
     const ui = await $.ui.mount({ plugin: 'xiaoke', surface: 'terminal', component: 'AbovePrompt', props: BAND })
     expect((await ui.find({ type: 'Client', key: 'avatar' }))?.props.width).toBe(AVATAR_SIZE.mini.columns)
     await ui.unmount()
   })
 
-  test('点小黎本身 = 展开；放松模式里再点 = 摸头', async ($, on) => {
+  test('点小克本身 = 展开；放松模式里再点 = 摸头', async ($, on) => {
     calmWorld(on)
     const ui = await $.ui.mount({ plugin: 'xiaoke', surface: 'terminal', component: 'AbovePrompt', props: BAND })
     await ui.pointer({ type: 'down', x: 4, y: 0, button: 'left', in: 'avatar' })
@@ -329,9 +329,9 @@ describe('放松模式（展开）', () => {
 })
 
 describe('点击校准', () => {
-  test('/xiaoli calibrate → 点 A、点 B → 存下口径并切回放松模式，之后按新口径判定', async ($, on) => {
+  test('/xiaoke calibrate → 点 A、点 B → 存下口径并切回放松模式，之后按新口径判定', async ($, on) => {
     calmWorld(on)
-    await $.command.run({ command: 'xiaoli', args: 'calibrate', ...COMMAND_ENV })
+    await $.command.run({ command: 'xiaoke', args: 'calibrate', ...COMMAND_ENV })
     const ui = await $.ui.mount({ plugin: 'xiaoke', surface: 'terminal', component: 'AbovePrompt', props: BAND })
     expect(await ui.find({ type: 'Text', text: /\[A\].*\[B\]/, in: 'controls' })).toBeDefined()
     // 模拟每个中文只上报 1.5 列的终端
@@ -345,41 +345,51 @@ describe('点击校准', () => {
   })
 })
 
-describe('斜杠命令：主命令 /xiaoli，旧命令 /xiaoke 仍可用', () => {
-  test('会话启动时两个命令都注册，主命令在前', async ($, on) => {
+describe('斜杠命令：只有 /xiaoke（0.5.1 起去掉 /xiaoli）', () => {
+  test('会话启动时只注册 /xiaoke，说明以「小克：」开头', async ($, on) => {
     const { seen } = await boot($, on, at(9, 0))
-    expect(seen.commands).toEqual(['xiaoli', 'xiaoke'])
+    expect(seen.commands).toEqual(['xiaoke'])
+    expect(seen.descriptions[0]?.startsWith('小克：')).toBe(true)
   })
 
-  test('keep off、keep、认不出的参数：/xiaoli 与 /xiaoke 回的文字一模一样', async ($, on) => {
+  test('/xiaoke 的回复：keep off 与认不出的参数，教用户输入的都是 /xiaoke', async ($, on) => {
     await boot($, on, at(13))
-    for (const args of ['keep off', 'keep', 'reset']) {
-      const byNew = await $.command.run({ command: 'xiaoli', args, ...COMMAND_ENV })
-      const byOld = await $.command.run({ command: 'xiaoke', args, ...COMMAND_ENV })
-      expect(byOld.text).toBe(byNew.text)
-    }
     const off = await $.command.run({ command: 'xiaoke', args: 'keep off', ...COMMAND_ENV })
-    expect(off.text).toBe('小黎：缓存保活关了，/xiaoli keep on 再打开')
+    expect(off.text).toBe('小克：缓存保活关了，/xiaoke keep on 再打开')
     const usage = await $.command.run({ command: 'xiaoke', args: 'reset', ...COMMAND_ENV })
-    expect(usage.text).toContain('不认识「reset」。用法：/xiaoli 切换工作/放松模式')
+    expect(usage.text).toContain('不认识「reset」。用法：/xiaoke 切换工作/放松模式')
+    expect(usage.text).not.toContain('/xiaoli')
   })
 
-  test('无参数切换模式：两个命令改的是同一份状态，/xiaoli 展开后 /xiaoke 再收起', async ($, on) => {
+  test('/xiaoli 不再被响应：不注册，也没有钩子接它，状态不变', async ($, on) => {
+    // 垫在最底下：哪个插件都没接的命令由这里回一句
+    on('command.run', (_$, e) => ({ text: `没人接：/${e.command}` }))
+    calmWorld(on)
+    const ui = await mountBand($)
+    const old = await $.command.run({ command: 'xiaoli', args: '', ...COMMAND_ENV })
+    expect(old.text).toBe('没人接：/xiaoli')
+    expect((await ui.find({ type: 'Client', key: 'avatar' }))?.props.width).toBe(AVATAR_SIZE.mini.columns)
+    expect((await $.command.run({ command: 'xiaoli', args: 'keep off', ...COMMAND_ENV })).text).toBe('没人接：/xiaoli')
+    expect((await $.command.run({ command: 'xiaoke', args: '', ...COMMAND_ENV })).text).toBe('小克：展开啦')
+    await ui.unmount()
+  })
+
+  test('无参数切换模式：/xiaoke 展开，再 /xiaoke 收起', async ($, on) => {
     calmWorld(on)
     const ui = await mountBand($)
     expect((await ui.find({ type: 'Client', key: 'avatar' }))?.props.width).toBe(AVATAR_SIZE.mini.columns)
-    expect((await $.command.run({ command: 'xiaoli', args: '', ...COMMAND_ENV })).text).toBe('小黎：展开啦')
+    expect((await $.command.run({ command: 'xiaoke', args: '', ...COMMAND_ENV })).text).toBe('小克：展开啦')
     expect((await ui.find({ type: 'Client', key: 'avatar' }))?.props.width).toBe(AVATAR_SIZE.full.columns)
-    expect((await $.command.run({ command: 'xiaoke', args: '', ...COMMAND_ENV })).text).toBe('小黎：缩小一点陪你')
+    expect((await $.command.run({ command: 'xiaoke', args: '', ...COMMAND_ENV })).text).toBe('小克：缩小一点陪你')
     expect((await ui.find({ type: 'Client', key: 'avatar' }))?.props.width).toBe(AVATAR_SIZE.mini.columns)
     await ui.unmount()
   })
 })
 
 describe('强制休息', () => {
-  test('/xiaoli rest 后小黎旁边弹出休息气泡，倒计时结束前收不回去', async ($, on) => {
+  test('/xiaoke rest 后小克旁边弹出休息气泡，倒计时结束前收不回去', async ($, on) => {
     calmWorld(on)
-    const result = await $.command.run({ command: 'xiaoli', args: 'rest', ...COMMAND_ENV })
+    const result = await $.command.run({ command: 'xiaoke', args: 'rest', ...COMMAND_ENV })
     expect(result.text).toContain('休息 2 分钟')
     const ui = await mountBand($)
     expect((await ui.find({ type: 'Client', key: 'avatar' }))?.props.width).toBe(AVATAR_SIZE.full.columns)
@@ -387,7 +397,7 @@ describe('强制休息', () => {
     expect(await bubbleText(ui, /还剩 2:00/)).toBeDefined()
     // 气泡占了按钮的位置
     expect(await ui.find({ type: 'Client', key: 'controls' })).toBeUndefined()
-    const stay = await $.command.run({ command: 'xiaoli', args: '', ...COMMAND_ENV })
+    const stay = await $.command.run({ command: 'xiaoke', args: '', ...COMMAND_ENV })
     expect(stay.text).toMatch(/还剩 2:00|再坚持 2:00|还有 2:00/)
     expect((await ui.find({ type: 'Client', key: 'avatar' }))?.props.width).toBe(AVATAR_SIZE.full.columns)
     await ui.unmount()
@@ -450,13 +460,13 @@ describe('像素形象', () => {
 })
 
 describe('安静模式', () => {
-  test('/xiaoli quiet on 后台词位置明确提示在安静模式，quiet off 恢复说话', async ($, on) => {
+  test('/xiaoke quiet on 后台词位置明确提示在安静模式，quiet off 恢复说话', async ($, on) => {
     calmWorld(on)
-    await $.command.run({ command: 'xiaoli', args: 'quiet on', ...COMMAND_ENV })
+    await $.command.run({ command: 'xiaoke', args: 'quiet on', ...COMMAND_ENV })
     const ui = await $.ui.mount({ plugin: 'xiaoke', surface: 'terminal', component: 'AbovePrompt', props: BAND })
-    expect(await ui.find({ type: 'Text', text: /安静模式中，\/xiaoli quiet off 恢复说话/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /安静模式中，\/xiaoke quiet off 恢复说话/ })).toBeDefined()
     await ui.unmount()
-    const back = await $.command.run({ command: 'xiaoli', args: 'quiet off', ...COMMAND_ENV })
+    const back = await $.command.run({ command: 'xiaoke', args: 'quiet off', ...COMMAND_ENV })
     expect(back.text).toContain('我回来啦')
     const ui2 = await $.ui.mount({ plugin: 'xiaoke', surface: 'terminal', component: 'AbovePrompt', props: BAND })
     expect(await ui2.find({ type: 'Text', text: /安静模式中/ })).toBeUndefined()
@@ -508,16 +518,16 @@ describe('真实台词', () => {
     expect(cleanLine('')).toBe('')
   })
 
-  test('/xiaoli ai off 关掉真实台词，ai on 再打开', async ($, on) => {
+  test('/xiaoke ai off 关掉真实台词，ai on 再打开', async ($, on) => {
     calmWorld(on)
-    const off = await $.command.run({ command: 'xiaoli', args: 'ai off', ...COMMAND_ENV })
-    expect(off.text).toBe('小黎：好，每轮结束不再自动说话了（不花 token）；点「悄悄话」仍会调用一次')
+    const off = await $.command.run({ command: 'xiaoke', args: 'ai off', ...COMMAND_ENV })
+    expect(off.text).toBe('小克：好，每轮结束不再自动说话了（不花 token）；点「悄悄话」仍会调用一次')
     const ui = await $.ui.mount({ plugin: 'xiaoke', surface: 'terminal', component: 'AbovePrompt', props: BAND })
     await ui.pointer({ type: 'down', x: 4, y: 0, button: 'left', in: 'avatar' })
     await ui.post({ type: 'control', key: 'chip-status' }, { in: 'controls' })
     expect(await ui.find({ type: 'Text', text: /真实台词已关/ })).toBeDefined()
     await ui.unmount()
-    const back = await $.command.run({ command: 'xiaoli', args: 'ai on', ...COMMAND_ENV })
+    const back = await $.command.run({ command: 'xiaoke', args: 'ai on', ...COMMAND_ENV })
     expect(back.text).toContain('用 haiku')
   })
 })
@@ -538,7 +548,7 @@ describe('提醒气泡（画法和点击）', () => {
   const widthOf = (row: readonly Seg[]) => row.reduce((w, seg) => w + displayWidth(seg.text), 0)
   const joined = (p: BubbleProps) => bubbleRows(p, false).map(row => row.map(seg => seg.text).join(''))
 
-  test('4 行圆角气泡：每行一样宽、右边框对得齐，尾巴在第 3 行指向小黎，按钮嵌在下边框', () => {
+  test('4 行圆角气泡：每行一样宽、右边框对得齐，尾巴在第 3 行指向小克，按钮嵌在下边框', () => {
     // 宽 44：标题 19 列、倒计时 9 列，上边框补 7 条线；台词 33 列，补 6 个空格；进度线 39 格剩 97%
     expect(joined(base)).toEqual([
       ` ╭─ 久坐提醒 · 起来走走 ${'─'.repeat(7)} 还剩 2:55 ─╮`,
@@ -610,13 +620,13 @@ describe('定点提醒（10/12/16/18 久坐，11/15/17 喝水）', () => {
     expect(doneHours(readLog(null, '2026-10-15'))).toEqual([])
   })
 
-  test('到点在小黎旁边弹出对话气泡，强提醒 3 分钟，不再走右上角 toast', async ($, on) => {
+  test('到点在小克旁边弹出对话气泡，强提醒 3 分钟，不再走右上角 toast', async ($, on) => {
     const { clock, seen } = await boot($, on, at(9, 59, 50))
     const ui = await mountBand($)
     expect(await bubbleOf(ui)).toBeUndefined()
     await clock.advance(15_000)
     const client = await ui.find({ type: 'Client', key: 'bubble' })
-    // 和放松模式的小黎一样高；宽度跟着内容走，不撑满整行
+    // 和放松模式的小克一样高；宽度跟着内容走，不撑满整行
     expect(client?.props.height).toBe(4)
     expect(client?.props.width).toBeLessThanOrEqual(64)
     expect((await ui.find({ type: 'Client', key: 'avatar' }))?.props.width).toBe(AVATAR_SIZE.full.columns)
@@ -657,7 +667,7 @@ describe('定点提醒（10/12/16/18 久坐，11/15/17 喝水）', () => {
     const ui = await mountBand($)
     await clock.advance(15_000)
     expect(await bubbleText(ui, /久坐提醒/)).toBeDefined()
-    // 10:40 回来点了下小黎（人在）
+    // 10:40 回来点了下小克（人在）
     await clock.set(at(10, 40))
     expect(await bubbleOf(ui)).toBeUndefined()
     await ui.pointer({ type: 'down', x: 4, y: 0, button: 'left', in: 'avatar' })
@@ -714,13 +724,13 @@ describe('定点提醒（10/12/16/18 久坐，11/15/17 喝水）', () => {
 
   test('安静模式不弹', async ($, on) => {
     const { clock, seen } = await boot($, on, at(16, 59, 55))
-    await $.command.run({ command: 'xiaoli', args: 'quiet on', ...COMMAND_ENV })
+    await $.command.run({ command: 'xiaoke', args: 'quiet on', ...COMMAND_ENV })
     const ui = await mountBand($)
     await clock.advance(10_000)
     expect(await bubbleOf(ui)).toBeUndefined()
     expect(seen.notifies).toBe(0)
     await ui.unmount()
-    await $.command.run({ command: 'xiaoli', args: 'quiet off', ...COMMAND_ENV })
+    await $.command.run({ command: 'xiaoke', args: 'quiet off', ...COMMAND_ENV })
   })
 })
 
@@ -857,7 +867,7 @@ describe('缓存保活', () => {
     const s = settleKeep(k, judgeFork(answered(128_000)), at(9, 50), at(9, 50, 4))
     expect(s.isKept).toBe(true)
     expect(s.next).toMatchObject({ count: 1, lastAt: at(9, 50), read: 128_000, output: 3, isSending: false })
-    expect(s.toast).toBe('小黎：缓存保活第 1 次，读缓存 128.0k，续到 10:50')
+    expect(s.toast).toBe('小克：缓存保活第 1 次，读缓存 128.0k，续到 10:50')
     expect(nextKeepAt(s.next)).toBe(at(10, 40))
   })
 
@@ -876,7 +886,7 @@ describe('缓存保活', () => {
     const k = { ...noteRequest(NEW_KEEP, at(9)), isSending: true }
     const first = settleKeep(k, judgeFork(overloaded), at(9, 50), at(9, 50, 2))
     expect(first.next.retryAt).toBe(at(9, 53, 2))
-    expect(first.toast).toBe('小黎：缓存保活失败（接口错误 529 overloaded），3 分钟后重试')
+    expect(first.toast).toBe('小克：缓存保活失败（接口错误 529 overloaded），3 分钟后重试')
     expect(keepStep(first.next, at(9, 53)).kind).toBe('wait')
     expect(keepStep(first.next, at(9, 53, 2)).kind).toBe('send')
     const second = settleKeep({ ...first.next, isSending: true }, judgeFork(overloaded), at(9, 53, 2), at(9, 53, 4))
@@ -914,7 +924,7 @@ describe('缓存保活', () => {
     expect(rollDay(k, '2026-10-16')).toMatchObject({ day: '2026-10-16', count: 0, read: 0, output: 0, last: '' })
   })
 
-  test('主对话 50 分钟没请求：旁路请求一次，toast + 小黎说一句，工作模式显示「保活 1 次」', { timeoutMs: 90_000 }, async ($, on) => {
+  test('主对话 50 分钟没请求：旁路请求一次，toast + 小克说一句，工作模式显示「保活 1 次」', { timeoutMs: 90_000 }, async ($, on) => {
     const prompts: string[] = []
     on('model.fork', (_$, e) => {
       prompts.push(e.prompt)
@@ -935,7 +945,7 @@ describe('缓存保活', () => {
     await ui.unmount()
   })
 
-  test('放松模式「保活」胶囊：子代理的请求不算；/xiaoli keep off 后工作模式不再显示', async ($, on) => {
+  test('放松模式「保活」胶囊：子代理的请求不算；/xiaoke keep off 后工作模式不再显示', async ($, on) => {
     answerSteps(on)
     await boot($, on, at(13))
     const ui = await mountBand($)
@@ -948,10 +958,10 @@ describe('缓存保活', () => {
     expect(await ui.find({ type: 'Text', text: /^下次保活 13:50（还剩 \d+min）· 本会话今天 0 次/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^今天还没保活过 · 今天累计读缓存 0/ })).toBeDefined()
     await ui.post({ type: 'control', key: 'expand' }, { in: 'controls' })
-    const off = await $.command.run({ command: 'xiaoli', args: 'keep off', ...COMMAND_ENV })
+    const off = await $.command.run({ command: 'xiaoke', args: 'keep off', ...COMMAND_ENV })
     expect(off.text).toContain('缓存保活关了')
     expect(await ui.find({ type: 'Text', text: /保活/ })).toBeUndefined()
-    const status = await $.command.run({ command: 'xiaoli', args: 'keep', ...COMMAND_ENV })
+    const status = await $.command.run({ command: 'xiaoke', args: 'keep', ...COMMAND_ENV })
     expect(status.text).toContain('缓存保活已关')
     await ui.unmount()
   })
@@ -967,14 +977,14 @@ describe('缓存保活', () => {
     })
     answerSteps(on)
     const { clock } = await boot($, on, at(13))
-    await $.command.run({ command: 'xiaoli', args: 'keep max 8', ...COMMAND_ENV })
+    await $.command.run({ command: 'xiaoke', args: 'keep max 8', ...COMMAND_ENV })
     await step($, { model: 'claude-opus-5-5' })
     await clock.set(at(13, 50))
     // 保活发出去还没回来：这时引擎若为它跑了一次 turn.step，不能当成主对话的请求
     await step($, { model: 'claude-opus-5-5' })
     release()
     await clock.advance(1000)
-    const status = await $.command.run({ command: 'xiaoli', args: 'keep', ...COMMAND_ENV })
+    const status = await $.command.run({ command: 'xiaoke', args: 'keep', ...COMMAND_ENV })
     expect(status.text).toContain('本会话今天 1 次')
     expect(status.text).toContain('距上次对话 50min')
     expect(status.text).toContain('下次保活 14:40')
@@ -999,11 +1009,11 @@ describe('缓存保活', () => {
     await step($, { model: 'claude-opus-5-5' })
     release()
     await clock.advance(1000)
-    const status = await $.command.run({ command: 'xiaoli', args: 'keep', ...COMMAND_ENV })
+    const status = await $.command.run({ command: 'xiaoke', args: 'keep', ...COMMAND_ENV })
     expect(status.text).toContain('距上次对话 不到 1min')
   })
 
-  test('/xiaoli keep on 让停下的立刻恢复：缓存还在就接着保，保不住的等下次对话计时，状态句不再说下次对话后恢复', () => {
+  test('/xiaoke keep on 让停下的立刻恢复：缓存还在就接着保，保不住的等下次对话计时，状态句不再说下次对话后恢复', () => {
     // 设了 8 小时上限、连续 8 小时没对话停下：最后一次保活 16:30 还续着缓存，17:20 打开就马上接着保
     const capped = { ...noteRequest(NEW_KEEP, at(9)), lastAt: at(16, 30), maxHours: 8, stopped: '连续 8 小时没对话，停止保活' }
     const resumed = resumeKeep(capped, at(17, 20))
@@ -1024,7 +1034,7 @@ describe('缓存保活', () => {
     for (const s of [resumed, fresh]) expect(keepStatusLine(s, at(17, 21))).not.toContain('下次对话后恢复')
   })
 
-  test('保活失败停下后 /xiaoli keep on：回复不再说下次对话后恢复，下一跳就重新保活', { timeoutMs: 90_000 }, async ($, on) => {
+  test('保活失败停下后 /xiaoke keep on：回复不再说下次对话后恢复，下一跳就重新保活', { timeoutMs: 90_000 }, async ($, on) => {
     let forks = 0
     on('model.fork', () => {
       forks += 1
@@ -1036,14 +1046,14 @@ describe('缓存保活', () => {
     // 13:50 失败、13:53 重试再失败 → 停下
     await clock.set(at(13, 53, 10))
     expect(forks).toBe(2)
-    expect((await $.command.run({ command: 'xiaoli', args: 'keep', ...COMMAND_ENV })).text).toContain('已停下')
-    const reply = await $.command.run({ command: 'xiaoli', args: 'keep on', ...COMMAND_ENV })
+    expect((await $.command.run({ command: 'xiaoke', args: 'keep', ...COMMAND_ENV })).text).toContain('已停下')
+    const reply = await $.command.run({ command: 'xiaoke', args: 'keep on', ...COMMAND_ENV })
     expect(reply.text).not.toContain('下次对话后恢复')
     expect(reply.text).not.toContain('已停下')
     expect(reply.text).toContain('马上保活')
     await clock.advance(1000)
     expect(forks).toBe(3)
-    expect((await $.command.run({ command: 'xiaoli', args: 'keep', ...COMMAND_ENV })).text).toContain('本会话今天 1 次')
+    expect((await $.command.run({ command: 'xiaoke', args: 'keep', ...COMMAND_ENV })).text).toContain('本会话今天 1 次')
   })
 })
 
@@ -1052,7 +1062,7 @@ describe('0.4.2 修复', () => {
     on('turn.start', (_$, e) => ({ turnId: e.turnId }))
     on('turn.complete', () => ({ text: '' }))
   }
-  const cmd = ($: Engine, args: string) => $.command.run({ command: 'xiaoli', args, ...COMMAND_ENV })
+  const cmd = ($: Engine, args: string) => $.command.run({ command: 'xiaoke', args, ...COMMAND_ENV })
   const avatarOf = async (ui: Band) => (await ui.find({ type: 'Client', key: 'avatar' }))?.props
 
   test('子代理开始不冲掉主对话这一轮：台词、交给 haiku 的「问」和工具统计都还是主对话的', async ($, on) => {
@@ -1086,7 +1096,7 @@ describe('0.4.2 修复', () => {
     await ui.unmount()
   })
 
-  test('带子不足 4 行时点小黎：说展不开，不改模式、不加好感；/xiaoli calibrate 回复写明要 4 行高', async ($, on) => {
+  test('带子不足 4 行时点小克：说展不开，不改模式、不加好感；/xiaoke calibrate 回复写明要 4 行高', async ($, on) => {
     calmWorld(on)
     const short = await $.ui.mount({ plugin: 'xiaoke', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, isCollapsed: false, maxRows: 3 } })
     await short.pointer({ type: 'down', x: 4, y: 0, button: 'left', in: 'avatar' })
@@ -1140,7 +1150,7 @@ describe('0.4.2 修复', () => {
     await ui.unmount()
   })
 
-  test('只有 /xiaoli show 让藏起来的小黎出来：keep、打错的参数、ai、quiet、切换模式都不会', async ($, on) => {
+  test('只有 /xiaoke show 让藏起来的小克出来：keep、打错的参数、ai、quiet、切换模式都不会', async ($, on) => {
     calmWorld(on)
     const ui = await mountBand($)
     expect(await avatarOf(ui)).toBeDefined()
@@ -1150,9 +1160,9 @@ describe('0.4.2 修复', () => {
       await cmd($, args)
       expect(await avatarOf(ui), args).toBeUndefined()
     }
-    expect((await cmd($, '')).text).toContain('/xiaoli show 叫我出来')
+    expect((await cmd($, '')).text).toContain('/xiaoke show 叫我出来')
     expect(await avatarOf(ui)).toBeUndefined()
-    expect((await cmd($, 'show')).text).toBe('小黎：我回来啦～')
+    expect((await cmd($, 'show')).text).toBe('小克：我回来啦～')
     expect(await avatarOf(ui)).toBeDefined()
     await ui.unmount()
   })
@@ -1234,7 +1244,7 @@ describe('0.4.2 修复', () => {
     expect(L.REST_DONE.some(s => /缩回去|收回/.test(s))).toBe(false)
     const { clock } = await boot($, on, at(14))
     const ui = await mountBand($)
-    expect((await cmd($, '')).text).toBe('小黎：展开啦')
+    expect((await cmd($, '')).text).toBe('小克：展开啦')
     await cmd($, 'rest')
     expect(await bubbleOf(ui)).toBeDefined()
     await clock.advance(2 * 60_000 + 1000)
@@ -1255,7 +1265,7 @@ describe('0.4.2 修复', () => {
     const aiOn = await cmd($, 'ai on')
     expect(aiOn.text).toContain('每轮结束时')
     expect(aiOn.text).not.toContain('开始')
-    expect((await cmd($, 'reset')).text).toContain('/xiaoli quiet 切换安静模式')
+    expect((await cmd($, 'reset')).text).toContain('/xiaoke quiet 切换安静模式')
     expect(L.whisperSystem()).not.toContain('橙')
     const ui = await mountBand($)
     await ui.pointer({ type: 'down', x: 4, y: 0, button: 'left', in: 'avatar' })
@@ -1266,7 +1276,7 @@ describe('0.4.2 修复', () => {
 })
 
 describe('0.4.3：保活默认不设上限、安静模式不打扰、ai off 说法', () => {
-  const cmd = ($: Engine, args: string) => $.command.run({ command: 'xiaoli', args, ...COMMAND_ENV })
+  const cmd = ($: Engine, args: string) => $.command.run({ command: 'xiaoke', args, ...COMMAND_ENV })
   const usage = (read: number, input = 200, output = 3) => ({
     input_tokens: input,
     output_tokens: output,
@@ -1345,33 +1355,33 @@ describe('0.4.3：保活默认不设上限、安静模式不打扰、ai off 说�
     expect(free).toBe('下次保活 09:50（还剩 40min）· 本会话今天 0 次 · 距上次对话 10min · 一直保活到会话关闭')
     expect(free).not.toContain('8h')
     expect(keepLimitText(k)).toBe('一直保活到会话关闭')
-    expect(keepLimitNote(k)).toBe('保活不设上限：一直保活到会话关闭（/xiaoli keep max 小时数 可设上限）')
+    expect(keepLimitNote(k)).toBe('保活不设上限：一直保活到会话关闭（/xiaoke keep max 小时数 可设上限）')
     const capped = { ...k, maxHours: 12 }
     expect(keepStatusLine(capped, at(9, 10))).toContain('距上次对话 10min / 上限 12h')
     expect(keepLimitText(capped)).toBe('连续 12 小时没对话就停')
-    expect(keepLimitNote(capped)).toBe('保活上限 12 小时：连续 12 小时没对话就停（/xiaoli keep max off 取消上限）')
+    expect(keepLimitNote(capped)).toBe('保活上限 12 小时：连续 12 小时没对话就停（/xiaoke keep max off 取消上限）')
     const late = { ...capped, lastAt: at(20, 30) }
     expect(keepStatusLine(late, at(20, 31))).toContain('到 12h 上限不再保活，缓存约 21:30 过期')
     const s = keepStep(late, at(21, 20))
     expect(s.kind === 'stop' ? s.reason : '').toBe('连续 12 小时没对话，停止保活')
   })
 
-  test('/xiaoli keep max 12 设上限、跨会话记住；keep max off 取消；不认识的参数只给用法、不改设置', async ($, on) => {
+  test('/xiaoke keep max 12 设上限、跨会话记住；keep max off 取消；不认识的参数只给用法、不改设置', async ($, on) => {
     const mem: Record<string, unknown> = {}
     memStore(on, mem)
     await boot($, on, at(13), null)
     const set = await cmd($, 'keep max 12')
-    expect(set.text).toContain('小黎：好，保活上限设为 12 小时：连续 12 小时没对话就停（跨会话记住，/xiaoli keep max off 取消）。')
+    expect(set.text).toContain('小克：好，保活上限设为 12 小时：连续 12 小时没对话就停（跨会话记住，/xiaoke keep max off 取消）。')
     expect(mem.prefs).toMatchObject({ isKeepAlive: true, keepMaxHours: 12 })
     expect((await cmd($, 'keep')).text).toContain('保活上限 12 小时：连续 12 小时没对话就停')
     const turnedOn = await cmd($, 'keep on')
     expect(turnedOn.text).toContain('主对话 50 分钟没请求我就续一下缓存，连续 12 小时没对话就停。')
     for (const bad of ['keep max', 'keep max 0', 'keep max 73', 'keep max 1.5', 'keep max abc']) {
-      expect((await cmd($, bad)).text, bad).toContain('小黎：上限要填 1–72 的整数小时，比如 /xiaoli keep max 12；/xiaoli keep max off 取消上限')
+      expect((await cmd($, bad)).text, bad).toContain('小克：上限要填 1–72 的整数小时，比如 /xiaoke keep max 12；/xiaoke keep max off 取消上限')
     }
     expect(mem.prefs).toMatchObject({ keepMaxHours: 12 })
     const off = await cmd($, 'keep max off')
-    expect(off.text).toContain('小黎：好，保活不设上限了：只要会话开着、保活开着，就一直保活到会话关闭（跨会话记住）。')
+    expect(off.text).toContain('小克：好，保活不设上限了：只要会话开着、保活开着，就一直保活到会话关闭（跨会话记住）。')
     expect(mem.prefs).toMatchObject({ keepMaxHours: 0 })
     expect((await cmd($, 'keep')).text).toContain('保活不设上限：一直保活到会话关闭')
     const again = await cmd($, 'keep on')
@@ -1455,7 +1465,7 @@ describe('0.4.3：保活默认不设上限、安静模式不打扰、ai off 说�
     await ui.post({ type: 'control', key: 'whisper' }, { in: 'controls' })
     expect(calls).toBe(0)
     expect(await ui.find({ type: 'Text', text: L.WHISPER_QUIET })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /安静模式中，\/xiaoli quiet off 恢复说话/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /安静模式中，\/xiaoke quiet off 恢复说话/ })).toBeUndefined()
     // 收起成工作模式也看得到这一句
     await ui.post({ type: 'control', key: 'expand' }, { in: 'controls' })
     expect(await ui.find({ type: 'Text', text: L.WHISPER_QUIET })).toBeDefined()
@@ -1484,10 +1494,10 @@ describe('0.4.3：保活默认不设上限、安静模式不打扰、ai off 说�
     }
     for (const h of seen.hints) expect(h).toContain('|keep off|keep max <小时>|keep max off|')
     const usageText = (await cmd($, 'reset')).text ?? ''
-    expect(usageText).toContain('/xiaoli ai on|off 每轮结束自动说话开关（悄悄话不受影响）')
-    expect(usageText).toContain('默认一直保活到会话关闭，/xiaoli keep max 小时数|off 设或取消上限） · /xiaoli calibrate 点击校准')
+    expect(usageText).toContain('/xiaoke ai on|off 每轮结束自动说话开关（悄悄话不受影响）')
+    expect(usageText).toContain('默认一直保活到会话关闭，/xiaoke keep max 小时数|off 设或取消上限） · /xiaoke calibrate 点击校准')
     const off = await cmd($, 'ai off')
-    expect(off.text).toBe('小黎：好，每轮结束不再自动说话了（不花 token）；点「悄悄话」仍会调用一次')
+    expect(off.text).toBe('小克：好，每轮结束不再自动说话了（不花 token）；点「悄悄话」仍会调用一次')
     expect(off.text).not.toContain('不再调用')
     await $.turn.start({ text: '帮我看看为什么构建失败', turnId: 't1' })
     await $.turn.complete({ turnId: 't1', reason: 'answer', answer: '构建失败是因为依赖版本冲突，锁文件里同一个包出现了两个大版本，已经帮你统一好了。', durationMs: 30_000, isAborted: false })
@@ -1704,8 +1714,8 @@ describe('0.5.0：自动更新', () => {
       { url: RAW_MANIFEST, init: undefined },
       { url: RAW_CHANGELOG, init: undefined },
     ])
-    expect(seen.toasts).toContain(`小黎：${localNotice(OPTIONS).toast}`)
-    expect(seen.logs).toContain(`小黎：${localNotice(OPTIONS).log}`)
+    expect(seen.toasts).toContain(`小克：${localNotice(OPTIONS).toast}`)
+    expect(seen.logs).toContain(`小克：${localNotice(OPTIONS).log}`)
     expect(seen.ran).toEqual([])
     expect(mem.updateCheckedDay).toBe(dayKey(nowMs))
   })
@@ -1732,5 +1742,33 @@ describe('0.5.0：自动更新', () => {
     await $.session.start({ cwd: '.', surface: 'terminal', isInteractive: true })
     await quiet.clock.advance(CHECK_DELAY_MS * 2)
     expect(quiet.seen.fetched).toEqual([])
+  })
+})
+
+describe('0.5.1：名字改回小克', () => {
+  test('人设：自称小克，不写死主人的名字，不再有「小黎」；仍然够短', () => {
+    for (const system of [reactSystem(), L.whisperSystem()]) {
+      expect(system).toContain('小克')
+      expect(system).not.toContain('小黎')
+    }
+    expect(reactSystem()).toContain('陪主人写代码')
+    expect(reactSystem().length).toBeLessThan(90)
+    expect(L.whisperSystem()).toContain(`不超过 ${L.WHISPER_MAX_CHARS} 个字`)
+  })
+
+  test('cleanLine 去掉自称前缀：新的「小克：」「小克mods：」与改名期间的「小黎：」「小黎 mods：」都去掉，别的开头不动', () => {
+    expect(cleanLine('小克：辛苦啦')).toBe('辛苦啦')
+    expect(cleanLine('「小克：喝口水吧～」')).toBe('喝口水吧～')
+    expect(cleanLine('小克mods: 歇会儿')).toBe('歇会儿')
+    expect(cleanLine('小黎：辛苦啦')).toBe('辛苦啦')
+    expect(cleanLine('小黎 mods：辛苦啦')).toBe('辛苦啦')
+    expect(cleanLine('小克今天也在')).toBe('小克今天也在')
+  })
+
+  test('保活提示词与问候、思考中的台词都自称小克', () => {
+    expect(KEEP_PROMPT.startsWith('[小克缓存保活]')).toBe(true)
+    expect(KEEP_PROMPT).not.toMatch(/小黎(?!\s*mods)/)
+    expect(L.greeting(10, 1)).toContain('我是小克')
+    expect(L.WHISPER_THINKING).toBe('小克歪着头想了想…')
   })
 })

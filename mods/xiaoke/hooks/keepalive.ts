@@ -13,14 +13,14 @@ export const KEEP_IDLE_MS = 50 * 60_000
 export const KEEP_LATE_MS = 58 * 60_000
 /** 失败后多久重试（只重试一次） */
 export const KEEP_RETRY_MS = 3 * 60_000
-/** 可选上限（/xiaoli keep max <小时>）允许的范围；默认 0 = 不设上限，一直保活到会话关闭 */
+/** 可选上限（/xiaoke keep max <小时>）允许的范围；默认 0 = 不设上限，一直保活到会话关闭 */
 export const KEEP_MAX_HOURS_MIN = 1
 export const KEEP_MAX_HOURS_MAX = 72
 /** 读到的缓存不到这次请求输入的一半，判定缓存已失效 */
 export const KEEP_MIN_HIT_PERCENT = 50
 /** 旁路请求追加的那句话，回复直接丢掉 */
 export const KEEP_PROMPT =
-  '[小黎缓存保活] 这是小黎 mods 插件自动发出的缓存保活请求，回复会被丢弃。不需要做任何事，不要调用工具，只回复一个字：在'
+  '[小克缓存保活] 这是小黎 mods 的陪伴猫小克自动发出的缓存保活请求，回复会被丢弃。不需要做任何事，不要调用工具，只回复一个字：在'
 
 export const NEW_KEEP: KeepAlive = {
   isOn: true,
@@ -45,7 +45,7 @@ export function validMaxHours(v: unknown): number {
   return typeof v === 'number' && Number.isInteger(v) && v >= KEEP_MAX_HOURS_MIN && v <= KEEP_MAX_HOURS_MAX ? v : 0
 }
 
-/** /xiaoli keep max 后面的参数：off 为 0（取消上限），1–72 的正整数为小时数，其余为 null（不认识） */
+/** /xiaoke keep max 后面的参数：off 为 0（取消上限），1–72 的正整数为小时数，其余为 null（不认识） */
 export function parseMaxHours(text: string): number | null {
   const t = text.trim()
   if (t === 'off') return 0
@@ -59,11 +59,11 @@ export function keepLimitText(k: KeepAlive): string {
   return k.maxHours > 0 ? `连续 ${k.maxHours} 小时没对话就停` : '一直保活到会话关闭'
 }
 
-/** /xiaoli keep 回复末尾的上限说明：当前设置和怎么改 */
+/** /xiaoke keep 回复末尾的上限说明：当前设置和怎么改 */
 export function keepLimitNote(k: KeepAlive): string {
   return k.maxHours > 0
-    ? `保活上限 ${k.maxHours} 小时：连续 ${k.maxHours} 小时没对话就停（/xiaoli keep max off 取消上限）`
-    : '保活不设上限：一直保活到会话关闭（/xiaoli keep max 小时数 可设上限）'
+    ? `保活上限 ${k.maxHours} 小时：连续 ${k.maxHours} 小时没对话就停（/xiaoke keep max off 取消上限）`
+    : '保活不设上限：一直保活到会话关闭（/xiaoke keep max 小时数 可设上限）'
 }
 
 /** 每一跳该做什么：等着、发保活、停下（带原因） */
@@ -103,7 +103,7 @@ export function noteRequest(k: KeepAlive, now: number): KeepAlive {
 const MISS_STOPPED = '缓存没读到'
 
 /**
- * /xiaoli keep on：打开，停下的立刻恢复，不用等下次对话。
+ * /xiaoke keep on：打开，停下的立刻恢复，不用等下次对话。
  * 缓存已经保不住的（距上次请求超过 58 分钟、或上次就是没读到缓存才停的）当作还没有可保的缓存，下次对话起重新计时；
  * 其余的清掉停下和重试，设了上限的从现在重新算（用户刚亲手打开，说明人在），到点就照常保活
  */
@@ -174,7 +174,7 @@ export function settleKeep(k: KeepAlive, o: KeepOutcome, sentAt: number, now: nu
         retryAt: 0,
         last: `${stamp} 读缓存 ${fmtTokens(o.read)} ✓ 出 ${o.output}`,
       },
-      toast: `小黎：缓存保活第 ${count} 次，读缓存 ${fmtTokens(o.read)}，续到 ${hhmm(sentAt + CACHE_TTL_MS)}`,
+      toast: `小克：缓存保活第 ${count} 次，读缓存 ${fmtTokens(o.read)}，续到 ${hhmm(sentAt + CACHE_TTL_MS)}`,
       isKept: true,
     }
   }
@@ -182,7 +182,7 @@ export function settleKeep(k: KeepAlive, o: KeepOutcome, sentAt: number, now: nu
   if (o.kind === 'miss') {
     return {
       next: { ...base, ...spent, retryAt: 0, stopped: `${MISS_STOPPED}（只命中 ${o.percent}%），可能已过期`, last: `${stamp} 只命中 ${o.percent}% ✗` },
-      toast: `小黎：保活没读到缓存（只命中 ${o.percent}%），可能已过期，先停下，下次对话后恢复`,
+      toast: `小克：保活没读到缓存（只命中 ${o.percent}%），可能已过期，先停下，下次对话后恢复`,
       isKept: false,
     }
   }
@@ -190,13 +190,13 @@ export function settleKeep(k: KeepAlive, o: KeepOutcome, sentAt: number, now: nu
   if (base.retryAt === 0 && retryAt < base.lastAt + KEEP_LATE_MS) {
     return {
       next: { ...base, ...spent, retryAt, last: `${stamp} 失败（${o.why}），${hhmm(retryAt)} 重试` },
-      toast: `小黎：缓存保活失败（${o.why}），3 分钟后重试`,
+      toast: `小克：缓存保活失败（${o.why}），3 分钟后重试`,
       isKept: false,
     }
   }
   return {
     next: { ...base, ...spent, retryAt: 0, stopped: `保活失败（${o.why}）`, last: `${stamp} 失败（${o.why}）✗` },
-    toast: `小黎：缓存保活失败（${o.why}），先停下，下次对话后恢复`,
+    toast: `小克：缓存保活失败（${o.why}），先停下，下次对话后恢复`,
     isKept: false,
   }
 }
@@ -204,10 +204,10 @@ export function settleKeep(k: KeepAlive, o: KeepOutcome, sentAt: number, now: nu
 /** 「缓存」卡片第 1 行：现在的状态和下一次保活 */
 export function keepStatusLine(k: KeepAlive, now: number): string {
   const today = `本会话今天 ${k.count} 次`
-  if (!k.isOn) return `缓存保活已关 · /xiaoli keep on 打开 · ${today}`
+  if (!k.isOn) return `缓存保活已关 · /xiaoke keep on 打开 · ${today}`
   if (k.isSending) return `正在保活… · ${today}`
   if (k.lastAt === 0) return `还没有可保的缓存，第一轮对话后开始计时 · ${today}`
-  if (k.stopped !== '') return `已停下：${k.stopped}，下次对话或 /xiaoli keep on 后恢复 · ${today}`
+  if (k.stopped !== '') return `已停下：${k.stopped}，下次对话或 /xiaoke keep on 后恢复 · ${today}`
   const next = nextKeepAt(k)
   const quiet = `距上次对话 ${fmtSpan(now - k.realAt)}`
   if (next === 0) return `${quiet}，到 ${k.maxHours}h 上限不再保活，缓存约 ${hhmm(k.lastAt + CACHE_TTL_MS)} 过期 · ${today}`
@@ -221,5 +221,5 @@ export function keepStatusLine(k: KeepAlive, now: number): string {
 /** 「缓存」卡片第 2 行：上次结果和今天的用量 */
 export function keepCostLine(k: KeepAlive): string {
   const last = k.last === '' ? '今天还没保活过' : `上次 ${k.last}`
-  return `${last} · 今天累计读缓存 ${fmtTokens(k.read)} / 出 ${fmtTokens(k.output)} token · /xiaoli keep on|off|max`
+  return `${last} · 今天累计读缓存 ${fmtTokens(k.read)} / 出 ${fmtTokens(k.output)} token · /xiaoke keep on|off|max`
 }
