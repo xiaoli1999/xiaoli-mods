@@ -44,6 +44,8 @@ import { cleanLine, donePrompt, isWorthReacting, reactSystem, startEcho } from '
 import type { TurnFacts } from './react'
 import { ALERT_MS, SCHEDULE, doneHours, kindAt, nextSlot, readLog } from './remind'
 import type { RemindKind } from './remind'
+import { CHECKED_DAY_KEY, CHECK_DELAY_MS, MANIFEST_FILE, NOTICE_TIMEOUT_MS, RUN_TIMEOUT_MS, runUpdateCheck } from './update'
+import type { UpdatePortsType } from './update'
 
 type Dollar = EngineInterface
 
@@ -158,6 +160,8 @@ const workStart = atom({ plugin: 'xiaoke', key: 'workStart' } as const, 0)
 const workbenchPane = atom({ plugin: 'xiaoke', key: 'workbenchPane' } as const, 'hide')
 /** 缓存保活：计时、开关和本会话今天的次数（/xiaoli keep on|off） */
 const keep = atom({ plugin: 'xiaoke', key: 'keep' } as const, NEW_KEEP)
+/** 本会话跑过 session.start 没有：热重载后 $.state 还在，据此认出不是全新启动 */
+const isStarted = atom({ plugin: 'xiaoke', key: 'isStarted' } as const, false)
 
 // 模块变量：热重载后清空，在 session.start 里从 $.state 恢复
 let currentMood: Mood = 'idle'
@@ -818,9 +822,97 @@ async function onWhisper($: Dollar): Promise<void> {
   await speak($, text, 'happy')
 }
 
+/** 本 mod 的名字：自动更新取主分支上 mods/<它>/ 下的文件，插件市场安装时更新 <它>@<市场名> */
+const MOD_NAME = 'xiaoke'
+
+/** 读一个文件，读不到为 '' */
+async function readText($: Dollar, path: string): Promise<string> {
+  try {
+    return await $.fs.read(path)
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 自动更新要用的外部能力（流程见 hooks/update.ts 的 runUpdateCheck，和工作台同一份）：只 GET 两个公开地址、不带请求头；
+ * 只运行 claude plugin marketplace update 与 claude plugin update 两条命令；两个 mod 经进程环境变量 XIAOLI_MODS_UPDATING 错开更新，
+ * 经 XIAOLI_MODS_RELOAD_AT 只发起一次 /reload-plugins
+ */
+async function updatePortsOf($: Dollar): Promise<UpdatePortsType> {
+  const root = $.plugin.root
+  return {
+    mod: MOD_NAME,
+    subject: '陪伴猫',
+    root,
+    today: dayKey(await $.clock.now()),
+    readCheckedDay: () => $.store.get(CHECKED_DAY_KEY),
+    writeCheckedDay: async day => {
+      await $.store.set(CHECKED_DAY_KEY, day)
+    },
+    readManifest: () => readText($, `${root.replace(/[\\/]+$/, '')}/${MANIFEST_FILE}`),
+    fetchText: async url => {
+      try {
+        const response = await $.http.fetch(url)
+        return response.ok && response.text.trim() !== '' ? response.text : null
+      } catch {
+        return null
+      }
+    },
+    isBusy: async () => busy,
+    readLock: () => $.env.get('XIAOLI_MODS_UPDATING'),
+    writeLock: async value => {
+      await $.env.set('XIAOLI_MODS_UPDATING', value)
+    },
+    readReloadAt: () => $.env.get('XIAOLI_MODS_RELOAD_AT'),
+    writeReloadAt: async value => {
+      await $.env.set('XIAOLI_MODS_RELOAD_AT', value)
+    },
+    now: () => $.clock.now(),
+    sleep: ms => $.clock.sleep(ms),
+    run: argv => $.process.run(argv, { timeoutMs: RUN_TIMEOUT_MS }),
+    canReload: async () => {
+      try {
+        return (await $.command.list()).some(i => i.name === 'reload-plugins' && i.source === 'builtin')
+      } catch {
+        return false
+      }
+    },
+    reload: async () => {
+      try {
+        await $.command.run({ command: 'reload-plugins', args: '' })
+      } catch (cause) {
+        $.ui.log(`自动更新：发起 /reload-plugins 失败：${cause instanceof Error ? cause.message : String(cause)}`, { to: 'debug' })
+        $.ui.toast('小黎：没能自动重新加载插件，输入 /reload-plugins 立即生效，或下次开会话自动生效')
+      }
+    },
+    notify: async notice => {
+      $.ui.toast(`小黎：${notice.toast}`, { timeoutMs: NOTICE_TIMEOUT_MS })
+      $.ui.log(`小黎：${notice.log}`)
+    },
+    log: text => $.ui.log(`自动更新：${text}`, { to: 'debug' }),
+  }
+}
+
+/** 会话启动后延后查一次有没有新版（每台机器每天成功查过一次就不再查）；出错只记调试日志，不打扰使用 */
+async function checkUpdate($: Dollar): Promise<void> {
+  try {
+    $.ui.log(`自动更新：${await runUpdateCheck(await updatePortsOf($))}`, { to: 'debug' })
+  } catch (cause) {
+    try {
+      $.ui.log(`自动更新出错：${cause instanceof Error ? cause.message : String(cause)}`, { to: 'debug' })
+    } catch {
+      // 记不了日志也不影响使用
+    }
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const result = await next(e)
+    // 本会话第一次跑 session.start 才算全新启动；热重载再来的看 $.state 认出来
+    const isFreshStart = !(await read($, isStarted))
+    if (isFreshStart) await update($, isStarted, () => true)
     // 主命令 /xiaoli；改名前的 /xiaoke 也照样注册，两个走下面同一个 command.run 处理
     await $.command.register({
       name: 'xiaoli',
@@ -881,6 +973,8 @@ export const register: Register = on => {
     $.clock.every(1000, () => {
       void tick($)
     })
+    // 自动更新：全新启动、有人在终端前时延后查一次；热重载、-p 与 SDK 的会话不查
+    if (isFreshStart && e.isInteractive && e.surface !== null) $.clock.after(CHECK_DELAY_MS, () => void checkUpdate($))
     return result
   })
 

@@ -7,7 +7,8 @@
  * 0.5.1 的首次使用自动发起设置引导（只发一次的标记、不打扰的条件、热重载与多会话），
  * 0.6.0 的工种与工作流（内置定义校验、三层查找与降级、按工作流建条目、不建分支的开工、workflow 工具、role 命令），
  * 0.7.0 的通用配置与项目差异（通用资料目录、displayName、systems、不用 TAPD、project 工具与命令），
- * 0.8.0 的体检与演练（两份文件的宽松读取、按工种筛依赖、演练文字与工作流配对、演练脚本、演示条目、guide 工具、三个入口、体检缺项）
+ * 0.8.0 的体检与演练（两份文件的宽松读取、按工种筛依赖、演练文字与工作流配对、演练脚本、演示条目、guide 工具、三个入口、体检缺项），
+ * 0.9.0 的自动更新（版本比较、CHANGELOG 截要点、安装方式、一天一查、两个地址回退、市场安装的更新与重载、本地目录只提示、不查的情况）
  * @author xiao li
  * @createDate 2026-10-21 18:20
  */
@@ -195,6 +196,30 @@ import {
     tourScript,
     tourStepsOf
 } from '../hooks/guide'
+import {
+    CHANGELOG_FILE,
+    CHECK_DELAY_MS,
+    MANIFEST_FILE,
+    WAIT_LIMIT,
+    argvCandidates,
+    changelogNotes,
+    compareVersion,
+    failedNotice,
+    failureReason,
+    installOf,
+    isCheckedToday,
+    isHeldByOther,
+    isNewer,
+    localNotice,
+    manifestVersion,
+    parseVersion,
+    runUpdateCheck,
+    sourceUrls,
+    updateCommandText,
+    updateSteps,
+    updatedNotice
+} from '../hooks/update'
+import type { RunResultType, UpdateNoticeType, UpdatePortsType } from '../hooks/update'
 
 /* 以下全部是造的数据，不含任何真实 TAPD 内容 */
 const WS = '90000001'
@@ -448,6 +473,8 @@ interface WorldType {
     builtins?: Record<string, string | null>
     /** 改写 guide/deps.json、guide/tour.json 的内容，null 为读不到；没写的照常用逐字副本 */
     guides?: { deps?: string | null; tour?: string | null }
+    /** mod 目录下 .claude-plugin/plugin.json 的内容（0.9.0 自动更新读自己的版本号）；没写为读不到 */
+    manifest?: string
 }
 
 /**
@@ -550,6 +577,8 @@ const boot = async ($: Engine, on: On, world: WorldType = {}) => {
             const guideText = guide in (world.guides ?? {}) ? world.guides?.[guide] : GUIDE_TEXTS[guide]
             return guideText === null || guideText === undefined ? { deny: 'ENOENT' } : { value: guideText }
         }
+        /* 0.9.0：mod 自己的 plugin.json 也单独给，默认读不到 */
+        if (path.endsWith('/xiaoxiaoli/.claude-plugin/plugin.json')) return world.manifest === undefined ? { deny: 'ENOENT' } : { value: world.manifest }
         const text = path.endsWith('/xiaoxiaoli/config.json') ? world.modConfig : builtin === undefined ? files[path] : (builtinText ?? undefined)
         return text === undefined ? { deny: 'ENOENT' } : { value: text }
     })
@@ -4576,5 +4605,349 @@ describe('0.8.0：体检与演练', () => {
         expect(guideSummaryText({ checkedText: '2026-11-12 18:30', missingList: [], skippedList: [], tour: 'done' })).toBe(
             `体检与演练：上次体检 2026-11-12 18:30，本工种用得到的都就绪；演练已走过${tail}`
         )
+    })
+})
+
+describe('0.9.0：自动更新', () => {
+    const MOD = 'xiaoxiaoli'
+    const TODAY = '2026-11-13'
+    const [RAW_MANIFEST, MIRROR_MANIFEST] = sourceUrls(MOD, MANIFEST_FILE) as [string, string]
+    const [RAW_CHANGELOG, MIRROR_CHANGELOG] = sourceUrls(MOD, CHANGELOG_FILE) as [string, string]
+    const manifestOf = (version: string) => JSON.stringify({ name: MOD, version })
+    const CHANGELOG = ['# 更新记录', '', '## 0.9.0（2026-11-13）', '', '- 插件市场安装', '- 每天自动更新', '', '## 0.8.0', '', '- 体检与演练'].join('\n')
+    const NOTES = ['插件市场安装', '每天自动更新']
+    /** 插件市场安装时的插件目录（Windows 写法） */
+    const MARKET_ROOT = 'C:\\Users\\a\\.claude\\plugins\\cache\\xiaoli-mods\\xiaoxiaoli\\0.8.0'
+    const OPTIONS = { subject: '工作台', from: '0.8.0', to: '0.9.0', noteList: NOTES }
+    const MANUAL = 'claude plugin marketplace update xiaoli-mods，再运行 claude plugin update xiaoxiaoli@xiaoli-mods'
+    const STEPS = [
+        ['claude', 'plugin', 'marketplace', 'update', 'xiaoli-mods'],
+        ['claude', 'plugin', 'update', 'xiaoxiaoli@xiaoli-mods']
+    ]
+    const ran = (stdout: string, exitCode = 0, stderr = ''): RunResultType => ({ exitCode, stdout, stderr })
+
+    /** 造的外部世界：远端文件、会话忙不忙、锁、命令结果；记下流程做了什么 */
+    interface FakeWorldType {
+        root?: string
+        stored?: unknown
+        manifest?: string
+        remote?: Record<string, string>
+        /** 依次回答「忙不忙」，最后一个一直重复 */
+        busyList?: boolean[]
+        lock?: string
+        reloadAt?: string
+        run?: (argv: readonly string[]) => RunResultType | Error
+        canReload?: boolean
+        /** 每睡一次调一下，可在第几次时放锁 */
+        onSleep?: (count: number, world: FakeWorldType) => void
+    }
+    const fake = (world: FakeWorldType = {}) => {
+        const seen = { fetched: [] as string[], ran: [] as string[][], notices: [] as UpdateNoticeType[], written: [] as string[], locks: [] as (string | undefined)[], slept: 0, reloads: 0 }
+        let now = 1000
+        const ports: UpdatePortsType = {
+            mod: MOD,
+            subject: '工作台',
+            root: world.root ?? MARKET_ROOT,
+            today: TODAY,
+            readCheckedDay: async () => world.stored,
+            writeCheckedDay: async day => {
+                seen.written.push(day)
+            },
+            readManifest: async () => world.manifest ?? manifestOf('0.8.0'),
+            fetchText: async url => {
+                seen.fetched.push(url)
+                return world.remote?.[url] ?? null
+            },
+            isBusy: async () => {
+                const list = world.busyList ?? [false]
+                return (list.length > 1 ? list.shift() : list[0]) ?? false
+            },
+            readLock: async () => world.lock,
+            writeLock: async value => {
+                seen.locks.push(value)
+                world.lock = value
+            },
+            readReloadAt: async () => world.reloadAt,
+            writeReloadAt: async value => {
+                world.reloadAt = value
+            },
+            now: async () => now,
+            sleep: async ms => {
+                seen.slept += 1
+                now += ms
+                world.onSleep?.(seen.slept, world)
+            },
+            run: async argv => {
+                seen.ran.push([...argv])
+                const result = world.run?.(argv) ?? ran('ok')
+                if (result instanceof Error) throw result
+                return result
+            },
+            canReload: async () => world.canReload ?? true,
+            reload: async () => {
+                seen.reloads += 1
+            },
+            notify: async notice => {
+                seen.notices.push(notice)
+            },
+            log: () => undefined
+        }
+        return { ports, seen }
+    }
+    /** 远端主分支上是 0.9.0、带更新要点 */
+    const NEWER = { [RAW_MANIFEST]: manifestOf('0.9.0'), [RAW_CHANGELOG]: CHANGELOG }
+
+    test('版本比较只认正式版本：0.10.0 比 0.9.0 大；可带 v 前缀；格式不对、预发布、前导零都不认，不认的不算新版', () => {
+        expect(parseVersion('0.9.0')).toEqual([0, 9, 0])
+        expect(parseVersion(' v1.2.3 ')).toEqual([1, 2, 3])
+        expect(['0.9', '0.9.0.1', '0.9.0-beta.1', '0.9.0+build', '01.2.3', 'x.y.z', '', 'vv1.0.0'].map(parseVersion)).toEqual([null, null, null, null, null, null, null, null])
+        expect(parseVersion(9)).toBeNull()
+        expect(compareVersion('0.10.0', '0.9.0')).toBeGreaterThan(0)
+        expect(compareVersion('0.9.0', '0.10.0')).toBeLessThan(0)
+        expect(compareVersion('v0.9.0', '0.9.0')).toBe(0)
+        expect(compareVersion('1.0.0', '0.99.99')).toBeGreaterThan(0)
+        expect(compareVersion('0.9', '0.8.0')).toBeNull()
+        expect([isNewer('0.10.0', '0.9.0'), isNewer('0.9.0', '0.9.0'), isNewer('0.8.9', '0.9.0'), isNewer('1.0.0-rc.1', '0.9.0'), isNewer('0.9.1', 'abc')]).toEqual([true, false, false, false, false])
+        expect(manifestVersion(manifestOf(' 0.9.0 '))).toBe('0.9.0')
+        expect([manifestVersion('不是 JSON'), manifestVersion('[]'), manifestVersion('{"version":9}'), manifestVersion('{}')]).toEqual([null, null, null, null])
+    })
+
+    test('从 CHANGELOG 截出新版本那一节的要点：有这一节取前几条、到下一节为止；没有这一节、文字为空都是空的', () => {
+        expect(changelogNotes(CHANGELOG, '0.9.0')).toEqual(NOTES)
+        expect(changelogNotes(CHANGELOG, '0.8.0')).toEqual(['体检与演练'])
+        expect(changelogNotes(CHANGELOG, '0.7.0')).toEqual([])
+        expect(changelogNotes('', '0.9.0')).toEqual([])
+        expect(changelogNotes('## [v0.9.0] - 2026-11-13\r\n* 甲\r\n- 乙\r\n  - 丙\r\n## 0.8.0\r\n- 丁', '0.9.0')).toEqual(['甲', '乙', '丙'])
+        expect(changelogNotes(['## 0.9.0', '- 1', '- 2', '- 3', '- 4', '- 5', '- 6'].join('\n'), '0.9.0')).toEqual(['1', '2', '3', '4', '5'])
+        expect(changelogNotes('## 0.9.0', '0.9.0', 2)).toEqual([])
+        /* 0.9.0 不会误配到 0.9.01 或 10.9.0 */
+        expect(changelogNotes('## 10.9.0\n- 错\n## 0.9.01\n- 也错', '0.9.0')).toEqual([])
+    })
+
+    test('判断安装方式：插件目录在 <插件根>/cache/<市场名>/<mod>/<版本> 下为插件市场安装（市场名取自路径），其余为本地目录加载', () => {
+        expect(installOf(MARKET_ROOT, MOD)).toEqual({ kind: 'market', marketplace: 'xiaoli-mods' })
+        expect(installOf('/home/a/.claude/plugins/cache/xiaoli-mods/xiaoxiaoli/0.9.0/', MOD)).toEqual({ kind: 'market', marketplace: 'xiaoli-mods' })
+        expect(installOf('D:/custom-plugins/cache/my-fork/xiaoxiaoli/0.9.0', MOD)).toEqual({ kind: 'market', marketplace: 'my-fork' })
+        expect(installOf('D:\\Demo\\xiaoli-mods\\mods\\xiaoxiaoli', MOD)).toEqual({ kind: 'local' })
+        expect(installOf('C:\\Users\\a\\.claude\\plugins\\cache\\xiaoli-mods\\xiaoke\\0.5.0', MOD)).toEqual({ kind: 'local' })
+        expect(installOf('C:/Users/a/.claude/plugins/cache/xiaoli-mods/xiaoxiaoli', MOD)).toEqual({ kind: 'local' })
+        expect(installOf('C:/x/plugins/cache/bad name/xiaoxiaoli/0.9.0', MOD)).toEqual({ kind: 'local' })
+        expect([isCheckedToday(TODAY, TODAY), isCheckedToday('2026-11-12', TODAY), isCheckedToday(undefined, TODAY), isCheckedToday(20261113, TODAY)]).toEqual([true, false, false, false])
+        expect([isHeldByOther(undefined, MOD), isHeldByOther('', MOD), isHeldByOther(MOD, MOD), isHeldByOther('xiaoke', MOD)]).toEqual([false, false, false, true])
+    })
+
+    test('两个地址只含仓库、分支、mod 名与文件名；更新命令先刷新市场再更新插件；Windows 上起不来时改经 cmd /c；失败原因取最后一行', () => {
+        expect(sourceUrls(MOD, MANIFEST_FILE)).toEqual([
+            'https://raw.githubusercontent.com/xiaoli1999/xiaoli-mods/master/mods/xiaoxiaoli/.claude-plugin/plugin.json',
+            'https://cdn.jsdelivr.net/gh/xiaoli1999/xiaoli-mods@master/mods/xiaoxiaoli/.claude-plugin/plugin.json'
+        ])
+        expect(updateSteps(MOD, 'xiaoli-mods')).toEqual(STEPS)
+        expect(updateCommandText(MOD, 'xiaoli-mods')).toBe(MANUAL)
+        expect(argvCandidates(STEPS[1] as string[], true)).toEqual([STEPS[1], ['cmd', '/c', ...(STEPS[1] as string[])]])
+        expect(argvCandidates(STEPS[1] as string[], false)).toEqual([STEPS[1]])
+        expect(failureReason(ran('Checking for updates…\nFailed to update plugin "xiaoxiaoli@xiaoli-mods"', 1))).toBe('Failed to update plugin "xiaoxiaoli@xiaoli-mods"')
+        expect(failureReason(ran('stdout 里的', 1, 'error: network down\n'))).toBe('error: network down')
+        expect(failureReason(ran('', 2))).toBe('退出码 2')
+        expect(failureReason(ran('', 1, 'x'.repeat(200)))).toBe(`${'x'.repeat(160)}..`)
+    })
+
+    test('提示文字：成功说从哪个版本到哪个、要点与怎么生效（发起了重载时说正在重新加载）；失败给原因与手动命令；本地目录加载说 git pull', () => {
+        expect(updatedNotice(OPTIONS, true)).toEqual({
+            toast: '工作台已从 0.8.0 更新到 0.9.0（更新要点见对话里的记录）；正在重新加载插件，马上生效；没生效就输入 /reload-plugins，或下次开会话自动生效',
+            log: '工作台已从 0.8.0 更新到 0.9.0，更新要点：\n- 插件市场安装\n- 每天自动更新\n正在重新加载插件，马上生效；没生效就输入 /reload-plugins，或下次开会话自动生效'
+        })
+        expect(updatedNotice({ ...OPTIONS, noteList: [] }, false)).toEqual({
+            toast: '工作台已从 0.8.0 更新到 0.9.0；输入 /reload-plugins 立即生效，或下次开会话自动生效',
+            log: '工作台已从 0.8.0 更新到 0.9.0\n输入 /reload-plugins 立即生效，或下次开会话自动生效'
+        })
+        expect(failedNotice(OPTIONS, '退出码 1', MANUAL).toast).toBe(`工作台发现新版 0.9.0（当前 0.8.0），自动更新没成功（退出码 1）；不影响继续使用，可以手动运行 ${MANUAL}，下次开会话也会再试`)
+        expect(localNotice(OPTIONS)).toEqual({
+            toast: '工作台发现新版 0.9.0（当前 0.8.0）；本机是从本地目录加载的，不自动更新；到仓库目录运行 git pull 即可',
+            log: '工作台发现新版 0.9.0（当前 0.8.0），更新要点：\n- 插件市场安装\n- 每天自动更新\n本机是从本地目录加载的，不自动更新；到仓库目录运行 git pull 即可'
+        })
+    })
+
+    test('一天只查一次：今天成功查过就不取；不比自己新时记今天；取不到（两个地址都失败、版本号不对、读不到自己的版本）不记，下次开会话再试', async () => {
+        const checked = fake({ stored: TODAY, remote: NEWER })
+        expect(await runUpdateCheck(checked.ports)).toBe('checked-today')
+        expect(checked.seen.fetched).toEqual([])
+        const same = fake({ stored: '2026-11-12', remote: { [RAW_MANIFEST]: manifestOf('0.8.0') } })
+        expect(await runUpdateCheck(same.ports)).toBe('up-to-date')
+        expect(same.seen.written).toEqual([TODAY])
+        expect(same.seen.fetched).toEqual([RAW_MANIFEST])
+        expect(await runUpdateCheck(fake({ remote: { [RAW_MANIFEST]: manifestOf('0.7.9') } }).ports)).toBe('up-to-date')
+        for (const remote of [{}, { [RAW_MANIFEST]: manifestOf('0.9') }, { [RAW_MANIFEST]: manifestOf('0.9.0-beta') }, { [RAW_MANIFEST]: '坏的' }]) {
+            const failed = fake({ remote })
+            expect(await runUpdateCheck(failed.ports)).toBe('fetch-failed')
+            expect(failed.seen.written).toEqual([])
+            expect(failed.seen.notices).toEqual([])
+        }
+        const noOwn = fake({ manifest: '', remote: NEWER })
+        expect(await runUpdateCheck(noOwn.ports)).toBe('fetch-failed')
+        expect(noOwn.seen.fetched).toEqual([])
+    })
+
+    test('两个地址的回退：原始地址取不到再取镜像，版本与更新要点都一样；更新要点取不到只说版本号', async () => {
+        const mirror = fake({ root: 'D:\\Demo\\xiaoli-mods\\mods\\xiaoxiaoli', remote: { [MIRROR_MANIFEST]: manifestOf('0.9.0'), [MIRROR_CHANGELOG]: CHANGELOG } })
+        expect(await runUpdateCheck(mirror.ports)).toBe('local-notified')
+        expect(mirror.seen.fetched).toEqual([RAW_MANIFEST, MIRROR_MANIFEST, RAW_CHANGELOG, MIRROR_CHANGELOG])
+        expect(mirror.seen.notices).toEqual([localNotice(OPTIONS)])
+        const noNotes = fake({ root: 'D:\\Demo\\xiaoli-mods\\mods\\xiaoxiaoli', remote: { [RAW_MANIFEST]: manifestOf('0.9.0') } })
+        await runUpdateCheck(noNotes.ports)
+        expect(noNotes.seen.notices).toEqual([localNotice({ ...OPTIONS, noteList: [] })])
+    })
+
+    test('本地目录加载：有新版只提示 git pull，不运行任何命令、不发起重载，记今天', async () => {
+        const local = fake({ root: 'D:\\Demo\\xiaoli-mods\\mods\\xiaoxiaoli', remote: NEWER })
+        expect(await runUpdateCheck(local.ports)).toBe('local-notified')
+        expect(local.seen.ran).toEqual([])
+        expect(local.seen.reloads).toBe(0)
+        expect(local.seen.written).toEqual([TODAY])
+    })
+
+    test('插件市场安装、更新成功：占锁后先刷新市场再更新插件，放锁；记今天，提示更新要点并发起一次 /reload-plugins', async () => {
+        const market = fake({ remote: NEWER, run: argv => (argv[2] === 'update' ? ran('Checking for updates for plugin "xiaoxiaoli@xiaoli-mods"…\nRestart to apply changes.') : ran('ok')) })
+        expect(await runUpdateCheck(market.ports)).toBe('updated')
+        expect(market.seen.ran).toEqual(STEPS)
+        expect(market.seen.locks).toEqual([MOD, undefined])
+        expect(market.seen.written).toEqual([TODAY])
+        expect(market.seen.notices).toEqual([updatedNotice(OPTIONS, true)])
+        expect(market.seen.reloads).toBe(1)
+        /* 引擎没有 /reload-plugins：提示自己输入，不发起 */
+        const noReload = fake({ remote: NEWER, canReload: false })
+        expect(await runUpdateCheck(noReload.ports)).toBe('updated')
+        expect(noReload.seen.notices).toEqual([updatedNotice(OPTIONS, false)])
+        expect(noReload.seen.reloads).toBe(0)
+        /* 另一个 mod 在自己更新完之后已经发起过重载：不再发起，一次重载两个都生效 */
+        const reloaded = fake({ remote: NEWER, reloadAt: '1000' })
+        await runUpdateCheck(reloaded.ports)
+        expect(reloaded.seen.reloads).toBe(0)
+    })
+
+    test('插件市场安装、更新失败：提示原因与手动命令，不记今天、不重载；说「已是最新」也算没更新上；锁照样放掉', async () => {
+        const failed = fake({ remote: NEWER, run: argv => (argv[2] === 'update' ? ran('Checking…', 1, 'Failed to update plugin "xiaoxiaoli@xiaoli-mods": offline') : ran('ok')) })
+        expect(await runUpdateCheck(failed.ports)).toBe('update-failed')
+        expect(failed.seen.notices).toEqual([failedNotice(OPTIONS, 'Failed to update plugin "xiaoxiaoli@xiaoli-mods": offline', MANUAL)])
+        expect(failed.seen.written).toEqual([])
+        expect(failed.seen.reloads).toBe(0)
+        expect(failed.seen.locks).toEqual([MOD, undefined])
+        const refresh = fake({ remote: NEWER, run: argv => (argv[2] === 'marketplace' ? ran('', 1, 'git fetch failed') : ran('ok')) })
+        expect(await runUpdateCheck(refresh.ports)).toBe('update-failed')
+        expect(refresh.seen.ran).toEqual([STEPS[0]])
+        const latest = fake({ remote: NEWER, run: () => ran('xiaoxiaoli is already at the latest version (0.8.0).') })
+        expect(await runUpdateCheck(latest.ports)).toBe('update-failed')
+        expect(latest.seen.notices).toEqual([failedNotice(OPTIONS, '插件市场的副本里还没有新版，稍后再试', MANUAL)])
+    })
+
+    test('Windows 上 claude 起不来（npm 装的 .cmd）：同一条命令改经 cmd /c 再试；macOS / Linux 不试，直接按失败', async () => {
+        const isRaw = (argv: readonly string[]) => argv[0] === 'claude'
+        const windows = fake({ remote: NEWER, run: argv => (isRaw(argv) ? new Error('spawn claude ENOENT') : ran('ok')) })
+        expect(await runUpdateCheck(windows.ports)).toBe('updated')
+        expect(windows.seen.ran).toEqual([STEPS[0], ['cmd', '/c', ...(STEPS[0] as string[])], STEPS[1], ['cmd', '/c', ...(STEPS[1] as string[])]])
+        const posix = fake({ root: '/home/a/.claude/plugins/cache/xiaoli-mods/xiaoxiaoli/0.8.0', remote: NEWER, run: argv => (isRaw(argv) ? new Error('spawn claude ENOENT') : ran('ok')) })
+        expect(await runUpdateCheck(posix.ports)).toBe('update-failed')
+        expect(posix.seen.ran).toEqual([STEPS[0]])
+        expect(posix.seen.notices[0]?.toast).toContain('自动更新没成功（spawn claude ENOENT）')
+    })
+
+    test('不在任务进行中更新：会话正忙时等到空闲再运行命令；另一个 mod 正在更新时等它放锁；一直等不到就这次不更新、不记今天', async () => {
+        const busy = fake({ remote: NEWER, busyList: [true, true, false] })
+        expect(await runUpdateCheck(busy.ports)).toBe('updated')
+        expect(busy.seen.slept).toBe(2)
+        const locked = fake({
+            remote: NEWER,
+            lock: 'xiaoke',
+            onSleep: (count, world) => {
+                if (count === 3) world.lock = undefined
+            }
+        })
+        expect(await runUpdateCheck(locked.ports)).toBe('updated')
+        expect(locked.seen.slept).toBe(3)
+        expect(locked.seen.ran).toEqual(STEPS)
+        const never = fake({ remote: NEWER, busyList: [true] })
+        expect(await runUpdateCheck(never.ports)).toBe('gave-up')
+        expect(never.seen.slept).toBe(WAIT_LIMIT)
+        expect(never.seen.ran).toEqual([])
+        expect(never.seen.written).toEqual([])
+    })
+
+    describe('经会话启动', () => {
+        /** 记下自动更新发出的请求：地址与请求选项 */
+        const watchFetch = (on: On, remote: Record<string, string>) => {
+            const fetched: { url: string; init: unknown }[] = []
+            on('http.fetch', (_$, e) => {
+                fetched.push({ url: e.url, init: e.init })
+                const text = remote[e.url]
+                return text === undefined ? { deny: 'offline' } : { value: { status: 200, ok: true, headers: {}, text } }
+            })
+            return fetched
+        }
+        /** 自动更新这次检查的结果（调试日志里的一行） */
+        const outcomeOf = (logs: readonly string[]) => logs.filter(i => /^自动更新：[a-z-]+$/.test(i))
+
+        test('全新的交互式会话：启动后延后才查；请求只是两个公开地址的 GET、不带任何选项；本地目录加载有新版时提示 git pull、不运行命令', async ($, on) => {
+            const fetched = watchFetch(on, NEWER)
+            const ranList: unknown[] = []
+            on('process.run', (_$, e) => {
+                ranList.push(e.argv)
+                return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+            })
+            const { clock, seen } = await boot($, on, { manifest: manifestOf('0.8.0') })
+            await clock.advance(CHECK_DELAY_MS - 10)
+            expect(fetched).toEqual([])
+            await clock.advance(10)
+            expect(fetched).toEqual([
+                { url: RAW_MANIFEST, init: undefined },
+                { url: RAW_CHANGELOG, init: undefined }
+            ])
+            expect(seen.toasts).toContain(`小小黎：${localNotice(OPTIONS).toast}`)
+            expect(seen.logs).toContain(`小小黎：${localNotice(OPTIONS).log}`)
+            expect(outcomeOf(seen.logs)).toEqual(['自动更新：local-notified'])
+            expect(ranList).toEqual([])
+        })
+
+        test('今天已经查过（$.store 里记着今天）：不发请求；不是今天的照常查', async ($, on) => {
+            const fetched = watchFetch(on, { [RAW_MANIFEST]: manifestOf('0.8.0') })
+            const { clock, seen } = await boot($, on, { manifest: manifestOf('0.8.0'), store: { updateCheckedDay: todayText(NOW) } })
+            await clock.advance(CHECK_DELAY_MS)
+            expect(fetched).toEqual([])
+            expect(outcomeOf(seen.logs)).toEqual(['自动更新：checked-today'])
+        })
+
+        test('两个地址都取不到：不提示、不打扰，只记调试日志（不记今天，下次开会话再查）', async ($, on) => {
+            const fetched = watchFetch(on, {})
+            const { clock, seen } = await boot($, on, { manifest: manifestOf('0.8.0'), store: { updateCheckedDay: '2026-01-01' } })
+            const toastCount = seen.toasts.length
+            await clock.advance(CHECK_DELAY_MS)
+            expect(fetched.map(i => i.url)).toEqual([RAW_MANIFEST, MIRROR_MANIFEST])
+            expect(seen.toasts).toHaveLength(toastCount)
+            expect(outcomeOf(seen.logs)).toEqual(['自动更新：fetch-failed'])
+        })
+
+        test('远端版本不比自己新：什么也不提示', async ($, on) => {
+            watchFetch(on, { [RAW_MANIFEST]: manifestOf('0.8.0') })
+            const { clock, seen } = await boot($, on, { manifest: manifestOf('0.8.0') })
+            const toastCount = seen.toasts.length
+            await clock.advance(CHECK_DELAY_MS)
+            expect(seen.toasts).toHaveLength(toastCount)
+            expect(outcomeOf(seen.logs)).toEqual(['自动更新：up-to-date'])
+        })
+
+        test('非交互式会话（-p、SDK）不查', async ($, on) => {
+            const fetched = watchFetch(on, { [RAW_MANIFEST]: manifestOf('0.8.0') })
+            const { clock } = await boot($, on, { manifest: manifestOf('0.8.0'), isInteractive: false })
+            await clock.advance(CHECK_DELAY_MS * 2)
+            expect(fetched).toEqual([])
+        })
+
+        test('热重载重跑 session.start：不再排一次检查', async ($, on) => {
+            const fetched = watchFetch(on, { [RAW_MANIFEST]: manifestOf('0.8.0') })
+            const { clock } = await boot($, on, { manifest: manifestOf('0.8.0') })
+            await clock.advance(CHECK_DELAY_MS)
+            expect(fetched).toHaveLength(1)
+            await $.session.start({ cwd: CWD, surface: 'terminal', isInteractive: true })
+            await clock.advance(CHECK_DELAY_MS * 2)
+            expect(fetched).toHaveLength(1)
+        })
     })
 })

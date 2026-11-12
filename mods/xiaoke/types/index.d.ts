@@ -166,6 +166,8 @@ declare module 'claude-code' {
       workbenchPane: 'show' | 'hide'
       /** 缓存保活：主对话 50 分钟没请求就旁路请求一次，续上 1 小时的提示词缓存 */
       keep: KeepAlive
+      /** 本会话跑过 session.start 没有：之后再来的（热重载）不算全新启动，不查自动更新 */
+      isStarted: boolean
     }
   }
 }

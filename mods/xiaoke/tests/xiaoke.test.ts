@@ -40,6 +40,25 @@ import * as L from '../hooks/lines'
 import type { Profile } from '../types'
 import { cleanLine, donePrompt, isWorthReacting, reactSystem, startEcho } from '../hooks/react'
 import { ALERT_MS, doneHours, kindAt, nextSlot, readLog } from '../hooks/remind'
+import {
+  CHANGELOG_FILE,
+  CHECK_DELAY_MS,
+  MANIFEST_FILE,
+  changelogNotes,
+  compareVersion,
+  failedNotice,
+  installOf,
+  isCheckedToday,
+  isNewer,
+  localNotice,
+  manifestVersion,
+  parseVersion,
+  runUpdateCheck,
+  sourceUrls,
+  updateSteps,
+  updatedNotice,
+} from '../hooks/update'
+import type { RunResultType, UpdateNoticeType, UpdatePortsType } from '../hooks/update'
 
 const BAND = {
   hasSurvey: false,
@@ -1482,5 +1501,232 @@ describe('0.4.3：保活默认不设上限、安静模式不打扰、ai off 说�
     await ui.post({ type: 'control', key: 'chip-status' }, { in: 'controls' })
     expect(await ui.find({ type: 'Text', text: /真实台词已关：每轮结束不自动说话，点悄悄话仍会调用一次/ })).toBeDefined()
     await ui.unmount()
+  })
+})
+
+describe('0.5.0：自动更新', () => {
+  const MOD = 'xiaoke'
+  const TODAY = '2026-11-13'
+  const [RAW_MANIFEST, MIRROR_MANIFEST] = sourceUrls(MOD, MANIFEST_FILE) as [string, string]
+  const [RAW_CHANGELOG, MIRROR_CHANGELOG] = sourceUrls(MOD, CHANGELOG_FILE) as [string, string]
+  const manifestOf = (version: string) => JSON.stringify({ name: MOD, version })
+  const CHANGELOG = ['# 更新记录', '', '## 0.5.0', '', '- 插件市场安装', '- 每天自动更新', '', '## 0.4.3', '', '- 保活默认不设上限'].join('\n')
+  const NOTES = ['插件市场安装', '每天自动更新']
+  const MARKET_ROOT = 'C:\\Users\\a\\.claude\\plugins\\cache\\xiaoli-mods\\xiaoke\\0.4.3'
+  const LOCAL_ROOT = 'D:\\Demo\\xiaoli-mods\\mods\\xiaoke'
+  const OPTIONS = { subject: '陪伴猫', from: '0.4.3', to: '0.5.0', noteList: NOTES }
+  const MANUAL = 'claude plugin marketplace update xiaoli-mods，再运行 claude plugin update xiaoke@xiaoli-mods'
+  const STEPS = [
+    ['claude', 'plugin', 'marketplace', 'update', 'xiaoli-mods'],
+    ['claude', 'plugin', 'update', 'xiaoke@xiaoli-mods'],
+  ]
+  const ran = (stdout: string, exitCode = 0, stderr = ''): RunResultType => ({ exitCode, stdout, stderr })
+  const NEWER = { [RAW_MANIFEST]: manifestOf('0.5.0'), [RAW_CHANGELOG]: CHANGELOG }
+
+  type FakeWorld = {
+    root?: string
+    stored?: unknown
+    remote?: Record<string, string>
+    busyList?: boolean[]
+    lock?: string
+    reloadAt?: string
+    run?: (argv: readonly string[]) => RunResultType | Error
+    canReload?: boolean
+  }
+  /** 造的外部世界，记下流程做了什么 */
+  function fake(world: FakeWorld = {}) {
+    const seen = { fetched: [] as string[], ran: [] as string[][], notices: [] as UpdateNoticeType[], written: [] as string[], locks: [] as (string | undefined)[], slept: 0, reloads: 0 }
+    let now = 1000
+    const ports: UpdatePortsType = {
+      mod: MOD,
+      subject: '陪伴猫',
+      root: world.root ?? MARKET_ROOT,
+      today: TODAY,
+      readCheckedDay: async () => world.stored,
+      writeCheckedDay: async day => {
+        seen.written.push(day)
+      },
+      readManifest: async () => manifestOf('0.4.3'),
+      fetchText: async url => {
+        seen.fetched.push(url)
+        return world.remote?.[url] ?? null
+      },
+      isBusy: async () => {
+        const list = world.busyList ?? [false]
+        return (list.length > 1 ? list.shift() : list[0]) ?? false
+      },
+      readLock: async () => world.lock,
+      writeLock: async value => {
+        seen.locks.push(value)
+        world.lock = value
+      },
+      readReloadAt: async () => world.reloadAt,
+      writeReloadAt: async value => {
+        world.reloadAt = value
+      },
+      now: async () => now,
+      sleep: async ms => {
+        seen.slept += 1
+        now += ms
+      },
+      run: async argv => {
+        seen.ran.push([...argv])
+        const result = world.run?.(argv) ?? ran('ok')
+        if (result instanceof Error) throw result
+        return result
+      },
+      canReload: async () => world.canReload ?? true,
+      reload: async () => {
+        seen.reloads += 1
+      },
+      notify: async notice => {
+        seen.notices.push(notice)
+      },
+      log: () => undefined,
+    }
+    return { ports, seen }
+  }
+
+  test('版本比较只认正式版本：0.10.0 比 0.9.0 大，可带 v 前缀，格式不对、预发布不认', () => {
+    expect(compareVersion('0.10.0', '0.9.0')).toBeGreaterThan(0)
+    expect(compareVersion('v0.5.0', '0.5.0')).toBe(0)
+    expect(parseVersion(' v1.2.3 ')).toEqual([1, 2, 3])
+    expect(['0.5', '0.5.0-beta', '01.0.0', 'abc', ''].map(parseVersion)).toEqual([null, null, null, null, null])
+    expect([isNewer('0.5.0', '0.4.3'), isNewer('0.4.3', '0.4.3'), isNewer('0.4.2', '0.4.3'), isNewer('0.5.0-rc.1', '0.4.3')]).toEqual([true, false, false, false])
+    expect(manifestVersion(manifestOf('0.5.0'))).toBe('0.5.0')
+    expect(manifestVersion('坏的')).toBeNull()
+  })
+
+  test('CHANGELOG 截要点：有这一节取前几条，没有这一节、文字为空都是空的', () => {
+    expect(changelogNotes(CHANGELOG, '0.5.0')).toEqual(NOTES)
+    expect(changelogNotes(CHANGELOG, '0.4.0')).toEqual([])
+    expect(changelogNotes('', '0.5.0')).toEqual([])
+  })
+
+  test('安装方式与一天一查：插件缓存 cache/<市场名>/xiaoke/<版本> 下为插件市场安装，仓库目录为本地目录加载；$.store 记着今天为查过', () => {
+    expect(installOf(MARKET_ROOT, MOD)).toEqual({ kind: 'market', marketplace: 'xiaoli-mods' })
+    expect(installOf(LOCAL_ROOT, MOD)).toEqual({ kind: 'local' })
+    expect(installOf('C:\\Users\\a\\.claude\\plugins\\cache\\xiaoli-mods\\xiaoxiaoli\\0.9.0', MOD)).toEqual({ kind: 'local' })
+    expect([isCheckedToday(TODAY, TODAY), isCheckedToday('2026-11-12', TODAY)]).toEqual([true, false])
+    expect(updateSteps(MOD, 'xiaoli-mods')).toEqual(STEPS)
+    expect(sourceUrls(MOD, MANIFEST_FILE)).toEqual([
+      'https://raw.githubusercontent.com/xiaoli1999/xiaoli-mods/master/mods/xiaoke/.claude-plugin/plugin.json',
+      'https://cdn.jsdelivr.net/gh/xiaoli1999/xiaoli-mods@master/mods/xiaoke/.claude-plugin/plugin.json',
+    ])
+  })
+
+  test('流程：今天查过不取；不比自己新记今天；两个地址都取不到不记；原始地址取不到走镜像', async () => {
+    const checked = fake({ stored: TODAY, remote: NEWER })
+    expect(await runUpdateCheck(checked.ports)).toBe('checked-today')
+    expect(checked.seen.fetched).toEqual([])
+    const same = fake({ remote: { [RAW_MANIFEST]: manifestOf('0.4.3') } })
+    expect(await runUpdateCheck(same.ports)).toBe('up-to-date')
+    expect(same.seen.written).toEqual([TODAY])
+    const offline = fake({ remote: {} })
+    expect(await runUpdateCheck(offline.ports)).toBe('fetch-failed')
+    expect(offline.seen.fetched).toEqual([RAW_MANIFEST, MIRROR_MANIFEST])
+    expect(offline.seen.written).toEqual([])
+    const mirror = fake({ root: LOCAL_ROOT, remote: { [MIRROR_MANIFEST]: manifestOf('0.5.0'), [MIRROR_CHANGELOG]: CHANGELOG } })
+    expect(await runUpdateCheck(mirror.ports)).toBe('local-notified')
+    expect(mirror.seen.fetched).toEqual([RAW_MANIFEST, MIRROR_MANIFEST, RAW_CHANGELOG, MIRROR_CHANGELOG])
+    expect(mirror.seen.notices).toEqual([localNotice(OPTIONS)])
+    expect(mirror.seen.ran).toEqual([])
+  })
+
+  test('插件市场安装：成功时先刷新市场再更新插件、记今天、提示要点并发起一次重载；失败提示原因与手动命令、不记今天', async () => {
+    const ok = fake({ remote: NEWER })
+    expect(await runUpdateCheck(ok.ports)).toBe('updated')
+    expect(ok.seen.ran).toEqual(STEPS)
+    expect(ok.seen.locks).toEqual([MOD, undefined])
+    expect(ok.seen.written).toEqual([TODAY])
+    expect(ok.seen.notices).toEqual([updatedNotice(OPTIONS, true)])
+    expect(ok.seen.reloads).toBe(1)
+    const failed = fake({ remote: NEWER, run: argv => (argv[2] === 'update' ? ran('', 1, 'offline') : ran('ok')) })
+    expect(await runUpdateCheck(failed.ports)).toBe('update-failed')
+    expect(failed.seen.notices).toEqual([failedNotice(OPTIONS, 'offline', MANUAL)])
+    expect(failed.seen.written).toEqual([])
+    expect(failed.seen.reloads).toBe(0)
+    const busy = fake({ remote: NEWER, busyList: [true, false] })
+    expect(await runUpdateCheck(busy.ports)).toBe('updated')
+    expect(busy.seen.slept).toBe(1)
+  })
+
+  /** 开一个会话：记下自动更新的请求、命令、提示与日志；$.store 用手边的 mem，看得到写进去的日期 */
+  async function bootUpdate($: Engine, on: On, options: { remote: Record<string, string>; mem?: Record<string, unknown>; isInteractive?: boolean }) {
+    const nowMs = at(9, 0)
+    const mem = options.mem ?? {}
+    const seen = { fetched: [] as { url: string; init: unknown }[], ran: [] as unknown[], toasts: [] as string[], logs: [] as string[] }
+    on('store.get', (_$, e) => ({ value: mem[e.key] }))
+    on('store.set', (_$, e) => {
+      mem[e.key] = e.value
+      return { value: undefined }
+    })
+    const clock = mock.clock(on, { now: nowMs })
+    on('ui.toast', (_$, e) => {
+      seen.toasts.push(e.text)
+      return { value: undefined }
+    })
+    on('ui.log', (_$, e) => {
+      seen.logs.push(e.text)
+      return { value: undefined }
+    })
+    on('ui.notify', () => ({ value: { isSent: false as const, reason: 'no-surface' as const } }))
+    on('command.register', (_$, e) => ({ value: { command: e.name } }))
+    on('session.usage', () => ({ value: { startedAt: nowMs, context: { window: 200_000 }, rateLimits: [] } }))
+    on('session.model', () => ({ value: 'claude-opus-5-5' }))
+    on('settings.read', () => ({ value: { effortLevel: 'xhigh' } }))
+    on('fs.read', (_$, e) => (e.path.replace(/\\/g, '/').endsWith('/xiaoke/.claude-plugin/plugin.json') ? { value: manifestOf('0.4.3') } : { deny: 'ENOENT' }))
+    on('http.fetch', (_$, e) => {
+      seen.fetched.push({ url: e.url, init: e.init })
+      const text = options.remote[e.url]
+      return text === undefined ? { deny: 'offline' } : { value: { status: 200, ok: true, headers: {}, text } }
+    })
+    on('process.run', (_$, e) => {
+      seen.ran.push(e.argv)
+      return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    })
+    on('session.start', (_$, e) => ({ cwd: e.cwd }))
+    const isInteractive = options.isInteractive ?? true
+    await $.session.start({ cwd: '.', surface: isInteractive ? 'terminal' : null, isInteractive })
+    return { clock, seen, mem, nowMs }
+  }
+
+  test('经会话启动：延后才查，请求只是公开地址的 GET、不带任何选项；本机从本地目录加载，有新版只提示 git pull、不运行命令，记今天', async ($, on) => {
+    const { clock, seen, mem, nowMs } = await bootUpdate($, on, { remote: NEWER })
+    await clock.advance(CHECK_DELAY_MS - 10)
+    expect(seen.fetched).toEqual([])
+    await clock.advance(10)
+    expect(seen.fetched).toEqual([
+      { url: RAW_MANIFEST, init: undefined },
+      { url: RAW_CHANGELOG, init: undefined },
+    ])
+    expect(seen.toasts).toContain(`小黎：${localNotice(OPTIONS).toast}`)
+    expect(seen.logs).toContain(`小黎：${localNotice(OPTIONS).log}`)
+    expect(seen.ran).toEqual([])
+    expect(mem.updateCheckedDay).toBe(dayKey(nowMs))
+  })
+
+  test('经会话启动：今天查过不再请求；取不到时不提示、不记今天', async ($, on) => {
+    const { clock, seen, mem } = await bootUpdate($, on, { remote: {}, mem: { updateCheckedDay: '2026-01-01' } })
+    await clock.advance(CHECK_DELAY_MS)
+    expect(seen.fetched.map(i => i.url)).toEqual([RAW_MANIFEST, MIRROR_MANIFEST])
+    expect(seen.toasts.filter(i => i.includes('新版'))).toEqual([])
+    expect(mem.updateCheckedDay).toBe('2026-01-01')
+  })
+
+  test('经会话启动：$.store 里记着今天时不发请求', async ($, on) => {
+    const { clock, seen } = await bootUpdate($, on, { remote: NEWER, mem: { updateCheckedDay: dayKey(at(9, 0)) } })
+    await clock.advance(CHECK_DELAY_MS)
+    expect(seen.fetched).toEqual([])
+  })
+
+  test('非交互式会话不查；热重载重跑 session.start 不再查', async ($, on) => {
+    const quiet = await bootUpdate($, on, { remote: NEWER, isInteractive: false })
+    await quiet.clock.advance(CHECK_DELAY_MS * 2)
+    expect(quiet.seen.fetched).toEqual([])
+    // 同一个会话里再跑一次 session.start（热重载）：交互式也不查，isStarted 已记在 $.state
+    await $.session.start({ cwd: '.', surface: 'terminal', isInteractive: true })
+    await quiet.clock.advance(CHECK_DELAY_MS * 2)
+    expect(quiet.seen.fetched).toEqual([])
   })
 })
