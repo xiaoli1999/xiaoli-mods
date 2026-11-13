@@ -6,7 +6,8 @@
  * @createDate 2026-11-11 10:30
  */
 import type { TapdProjectType, WorkplaceType } from '../types'
-import { baseName, isBranchTemplate, isRefName, normalizePath, samePath } from './workbench'
+import { baseName, isRefName, normalizePath, samePath } from './workbench'
+import { branchTemplateProblem } from './branch'
 
 /** 全局根目录下放各项目子目录的目录名 */
 export const PROJECTS_DIR = 'projects'
@@ -197,8 +198,11 @@ const pickText = (value: unknown): string | undefined => (typeof value === 'stri
 export const toBindInput = (raw: Record<string, unknown>): BindInputType | string => {
     const project = typeof raw.project === 'number' ? String(raw.project) : raw.project
     if (typeof project !== 'string' || !project.trim()) return 'project 要填 TAPD 项目名或项目 ID'
-    if (raw.branchTemplate !== undefined && !isBranchTemplate(raw.branchTemplate)) return 'branchTemplate 要含 {id}，且只能含字母、数字与 . _ / -'
-    if (raw.bugBranchTemplate !== undefined && !isBranchTemplate(raw.bugBranchTemplate)) return 'bugBranchTemplate 要含 {id}，且只能含字母、数字与 . _ / -'
+    /* 模板校验与 project 工具共用：占位符认 {id}（必须有）与 {name}，再用示例值拼一次做分支名自检 */
+    for (const field of ['branchTemplate', 'bugBranchTemplate'] as const) {
+        const problem = raw[field] === undefined ? '' : branchTemplateProblem(raw[field], field)
+        if (problem !== '') return problem
+    }
     if (raw.branchBase !== undefined && !(typeof raw.branchBase === 'string' && isRefName(raw.branchBase))) return 'branchBase 只能含字母、数字与 . _ / -'
 
     return {

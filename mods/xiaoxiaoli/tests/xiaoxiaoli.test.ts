@@ -8,7 +8,8 @@
  * 0.6.0 的工种与工作流（内置定义校验、三层查找与降级、按工作流建条目、不建分支的开工、workflow 工具、role 命令），
  * 0.7.0 的通用配置与项目差异（通用资料目录、displayName、systems、不用 TAPD、project 工具与命令），
  * 0.8.0 的体检与演练（两份文件的宽松读取、按工种筛依赖、演练文字与工作流配对、演练脚本、演示条目、guide 工具、三个入口、体检缺项），
- * 0.9.0 的自动更新（版本比较、CHANGELOG 截要点、安装方式、一天一查、两个地址回退、市场安装的更新与重载、本地目录只提示、不查的情况）
+ * 0.9.0 的自动更新（版本比较、CHANGELOG 截要点、安装方式、一天一查、两个地址回退、市场安装的更新与重载、本地目录只提示、不查的情况），
+ * 0.10.0 的发版工具（工作流 get 时替换 {tools}、存盘不换，三个工种的发版环节引用工具，概况里的发版配置，演练里发版那一环）
  * @author xiao li
  * @createDate 2026-10-21 18:20
  */
@@ -73,10 +74,20 @@ import {
     wrapWidth
 } from '../hooks/layout'
 import {
+    MISSING_NAME_TEXT,
+    SET_NAME_HINT,
+    branchNameProblem,
+    branchSettingsOf,
+    branchSummaryText,
+    branchTemplateProblem,
+    planBranch
+} from '../hooks/branch'
+import {
     DEFAULT_NAME,
     PROFILE_NEWER_TEXT,
     ROLE_TITLES,
     WORK_ROLES,
+    checkBranchName,
     checkName,
     fullNameOf,
     guidedByOf,
@@ -143,6 +154,7 @@ import {
     applyProgress,
     findStepTask,
     findTask,
+    isBranchTemplate,
     isSlowStep,
     legacySteps,
     newTask,
@@ -167,6 +179,8 @@ import {
     parseWorkflow,
     pickWorkflow,
     toWorkflowInput,
+    fillTools,
+    toolsDirOf,
     workflowFileText,
     workflowText
 } from '../hooks/workflow'
@@ -177,6 +191,7 @@ import {
     parseProjectExtras,
     projectConfigText,
     projectSummaryText,
+    releaseSummaryText,
     systemsText,
     toProjectChange
 } from '../hooks/project'
@@ -2982,7 +2997,8 @@ describe('0.5.0：起名与首次引导', () => {
     test('mcp__xiaoxiaoli__setup 名字不合格：如实拒绝，不写入，名字与引导都不变', async ($, on) => {
         const { clock, seen } = await boot($, on, { profile: null })
         expect((await callSetup($, { name: '小<美' })).deny).toBe('小黎：参数不对，名字不能含 < > & " \' 这五个字符（名字会进 TAPD 评论的署名），没有写入')
-        expect((await callSetup($, {})).deny).toBe('小黎：参数不对，name 与 role 至少给一个，没有写入')
+        /* 0.10.0 起 setup 多了 branchName，三者至少给一个 */
+        expect((await callSetup($, {})).deny).toBe('小黎：参数不对，name、role 与 branchName 至少给一个，没有写入')
         expect((await callSetup($, { name: '一二三四五六七八九十甲乙丙' })).deny).toBe('小黎：参数不对，名字最多 12 个字符，现在是 13 个，没有写入')
         expect((await callSetup($, { name: ' AI 工作台 ' })).deny).toBe('小黎：参数不对，名字不能为空（去掉首尾空白与「AI工作台」后缀后什么也不剩），没有写入')
         expect(seen.written).toEqual([])
@@ -3902,7 +3918,8 @@ describe('0.7.0：通用配置与项目差异', () => {
     })
 
     test('project 工具 set 的参数与写回：至少给一项；systems 要是对象、键合格、值为布尔或 null；与已有的合并，null 去键，清空后去掉整项，别的字段原样保留', () => {
-        expect(toProjectChange({})).toBe('displayName 与 systems 至少给一个')
+        /* 0.10.0 起 set 多了三个分支设置，五者至少给一个 */
+        expect(toProjectChange({})).toBe('displayName、systems、branchTemplate、bugBranchTemplate、branchBase 至少给一个')
         expect(toProjectChange({ displayName: '' })).toEqual({ displayName: '' })
         expect(toProjectChange({ displayName: ' 演示 ' })).toEqual({ displayName: '演示' })
         expect(toProjectChange({ systems: 'x' })).toBe('systems 要是对象，如 { "tapd": false, "yuque": true }')
@@ -4044,6 +4061,10 @@ describe('0.7.0：通用配置与项目差异', () => {
             '用到的系统：yuque 不用、figma 用',
             `通用资料目录：${SHARED}（resources.md 有，secrets.env 没有）`,
             `项目资料目录：${global.dir}（resources.md 没有，secrets.env 有）；两处都有的以项目的为准`,
+            /* 0.10.0 起资料目录后面多一行发版配置（两处的 release.json 在不在） */
+            '发版配置（release.json）：通用资料目录没有，项目资料目录没有；用 Jenkins 发版时在项目资料目录配一份，见工作面板 README「发版工具」',
+            /* 0.10.0 起再多一行分支命名（模板、起点、名字段与示例） */
+            '分支命名：需求模板 feat/{id}，缺陷模板 fix/{id}，起点 origin/master；名字段没记；示例：需求 feat/1000001，缺陷 fix/1000001',
             '工作流：内置 · 前端',
             '工作台：小黎AI工作台；工种：前端（没设，按前端）',
             /* 0.8.0 起概况末尾多一行体检与演练（默认档案记着演练已走过，这里没有 env.json） */
@@ -4075,7 +4096,7 @@ describe('0.7.0：通用配置与项目差异', () => {
     test('project 工具 set 的失败：参数不对、写文件失败都如实拒绝，不写入', async ($, on) => {
         const { seen } = await boot($, on, { cwd: FG_ROOT, files: { [global.config]: JSON.stringify(GLOBAL_CONFIG) }, writeDenied: true })
         const deny = async (args: Record<string, unknown>) => (await callProject($, { action: 'set', ...args })).deny
-        expect(await deny({})).toBe('小黎：参数不对，displayName 与 systems 至少给一个，没有写入')
+        expect(await deny({})).toBe('小黎：参数不对，displayName、systems、branchTemplate、bugBranchTemplate、branchBase 至少给一个，没有写入')
         expect(await deny({ displayName: '一二三四五六七八九十一二三四五六七八九十甲' })).toBe('小黎：参数不对，displayName 最多 20 个字符，现在是 21 个，没有写入')
         expect(await deny({ displayName: '甲\n乙' })).toBe('小黎：参数不对，displayName 不能含换行、制表等控制字符，没有写入')
         expect(await deny({ systems: { Bad: true } })).toBe('小黎：参数不对，systems 的键「Bad」要是小写字母开头、只含小写字母、数字与 - 的文字，最多 32 个字符，没有写入')
@@ -5004,5 +5025,429 @@ describe('0.9.0：自动更新', () => {
             await clock.advance(CHECK_DELAY_MS * 2)
             expect(fetched).toHaveLength(1)
         })
+    })
+})
+
+describe('0.10.0：发版工具', () => {
+    const global = globalFilesOf(FG_ROOT)
+    /** 主会话调一次工作流工具、项目工具、演练工具（新工具不在生成的工具名清单里，按宽松的入参调） */
+    const callWorkflow = ($: Engine, args: Record<string, unknown>) => $.tool.call({ tool: 'mcp__xiaoxiaoli__workflow', ...args } as unknown as ToolCallArgs)
+    const callProject = ($: Engine, args: Record<string, unknown>) => $.tool.call({ tool: 'mcp__xiaoxiaoli__project', ...args } as unknown as ToolCallArgs)
+    const callGuide = ($: Engine, args: Record<string, unknown>) => $.tool.call({ tool: 'mcp__xiaoxiaoli__guide', ...args } as unknown as ToolCallArgs)
+    /** 解析内置工作流的逐字副本，不合格直接失败 */
+    const builtinOf = (role: WorkRole) => {
+        const parsed = parseWorkflow(BUILTIN_WORKFLOW_TEXTS[role])
+        if (!('workflow' in parsed)) throw new Error(`${role} 不合格`)
+        return parsed.workflow
+    }
+    const releaseOf = (role: WorkRole) => {
+        const step = builtinOf(role).story.find(i => i.key === 'release')
+        if (step === undefined) throw new Error(`${role} 没有 release`)
+        return step
+    }
+    const tourOf = () => {
+        const parsed = parseTour(GUIDE_TEXTS.tour)
+        if (!('tour' in parsed)) throw new Error(parsed.reason)
+        return parsed.tour
+    }
+    /** 引擎给的插件目录换成正斜杠后，发版工具应在的位置（只认结尾，插件目录随机器而变） */
+    const TOOL_TAIL = '/xiaoxiaoli/tools/jenkins.mjs'
+
+    test('{tools} 的替换：插件目录下 tools 的绝对路径统一成正斜杠；文字里的占位符全换掉，路径里的 $ 不会被当成替换模式；目录为空时原样', () => {
+        expect(toolsDirOf('C:\\Users\\dev\\.claude\\plugins\\cache\\xiaoli-mods\\xiaoxiaoli\\0.10.0')).toBe('C:/Users/dev/.claude/plugins/cache/xiaoli-mods/xiaoxiaoli/0.10.0/tools')
+        expect(toolsDirOf('/home/dev/xiaoli-mods/mods/xiaoxiaoli/')).toBe('/home/dev/xiaoli-mods/mods/xiaoxiaoli/tools')
+        expect(toolsDirOf('')).toBe('')
+        expect(fillTools('node "{tools}/jenkins.mjs" 与 {tools}', 'D:/a$&b/tools')).toBe('node "D:/a$&b/tools/jenkins.mjs" 与 D:/a$&b/tools')
+        expect(fillTools('node "{tools}/jenkins.mjs"', '')).toBe('node "{tools}/jenkins.mjs"')
+    })
+
+    test('workflow 工具的返回文字：给了 tools 目录时细则里的 {tools} 都换成它（rules、tools 等），定义本身不改；不给时照旧', () => {
+        const active = pickWorkflow({ project: null, personal: null, builtin: { path: '/mod/workflows/frontend.json', text: BUILTIN_WORKFLOW_TEXTS.frontend }, role: 'frontend' }).active
+        const filled = workflowText(active, 'story', 'D:/mods/xiaoxiaoli/tools')
+        expect(filled).not.toContain('{tools}')
+        const release = (JSON.parse(filled.split('\n')[1] ?? '{}') as { story: WorkflowStepTypeLike[] }).story.find(i => i.key === 'release')
+        expect(release?.tools).toContain('node "D:/mods/xiaoxiaoli/tools/jenkins.mjs"')
+        expect(release?.rules?.[0]?.startsWith('工具：在项目目录下运行 node "D:/mods/xiaoxiaoli/tools/jenkins.mjs" <子命令>')).toBe(true)
+        expect(workflowText(active, 'story')).toContain('{tools}/jenkins.mjs')
+        expect(releaseOfActive(active).rules?.[0]).toContain('{tools}/jenkins.mjs')
+        /* 只要缺陷那组时同样替换（缺陷步骤里没有占位符，照常返回） */
+        expect(workflowText(active, 'bug', 'D:/x/tools')).toBe(workflowText(active, 'bug'))
+    })
+
+    test('前端、后端、Python 的发版环节：键与标题不变（前端仍 11 步），tools 与 rules 引用发版工具，写明默认不触发、受保护环境、缺配置怎么办、验收与提测', () => {
+        expect(builtinOf('frontend').story).toHaveLength(11)
+        expect(builtinOf('frontend').story.map(i => i.key)).toEqual(STORY_STEPS.map(i => i.key))
+        expect((['frontend', 'backend', 'python'] as const).map(role => releaseOf(role).title)).toEqual(['发版', '发版', '上线'])
+        for (const role of ['frontend', 'backend', 'python'] as const) {
+            const step = releaseOf(role)
+            const rules = (step.rules ?? []).join('\n')
+            expect(step.tools).toContain('node "{tools}/jenkins.mjs"')
+            expect(step.what).toContain('提测')
+            expect(rules).toContain('node "{tools}/jenkins.mjs" <子命令> --config <发版配置> --secrets "<通用资料目录>/secrets.env" --secrets "<项目资料目录>/secrets.env"')
+            expect(rules).toContain('先跑 check（只读）')
+            expect(rules).toContain('请用户自己填进 secrets.env')
+            expect(rules).toContain('先不带 --yes 跑 build')
+            expect(rules).toContain('用户同意后才带 --yes')
+            expect(rules).toContain('wait 到结束')
+            expect(rules).toContain('protected 为 true')
+            expect(rules).toContain('回滚建议，由用户定')
+            expect(rules).toContain('流转到待测试')
+            expect(rules).toContain('@ 测试负责人')
+            expect(rules).toContain('「TAPD 评论格式」')
+        }
+        expect((releaseOf('frontend').rules ?? []).join('\n')).toContain('可发 / 不建议发')
+        expect((releaseOf('python').rules ?? []).join('\n')).toContain('可上 / 不建议上')
+        expect((releaseOf('backend').rules ?? []).join('\n')).toContain('有数据库变更时写明执行顺序')
+    })
+
+    test('workflow 工具 get（全局模式）：内置工作流里的 {tools} 换成插件目录下 tools 的绝对路径（正斜杠）；用户自定义里写的 {tools} 同样换，存盘的定义不换', async ($, on) => {
+        const { files } = await boot($, on, { cwd: FG_ROOT, files: { [global.config]: JSON.stringify(GLOBAL_CONFIG) } })
+        const builtin = String((await callWorkflow($, { action: 'get', kind: 'story' })).result)
+        expect(builtin).not.toContain('{tools}')
+        expect(builtin).toContain(TOOL_TAIL)
+        expect(builtin).not.toMatch(/\\\\tools/)
+        const custom = {
+            title: '带发版',
+            story: [{ key: 'ship', title: '发版', rules: ['运行 node "{tools}/jenkins.mjs" check'] }],
+            bug: [{ key: 'fix', title: '修' }]
+        }
+        expect(String((await callWorkflow($, { action: 'set', scope: 'project', definition: custom })).result)).toContain('已写入项目自定义工作流')
+        const stored = files[`${global.dir}/workflow.json`] ?? ''
+        expect(stored).toContain('{tools}/jenkins.mjs')
+        const got = String((await callWorkflow($, { action: 'get' })).result)
+        expect(got).toContain('来源：项目自定义')
+        expect(got).not.toContain('{tools}')
+        expect(got).toContain(`${TOOL_TAIL}\\" check`)
+        expect(files[`${global.dir}/workflow.json`]).toBe(stored)
+    })
+
+    test('概况里的发版配置一行：两处 release.json 在不在（只看在不在、不读内容），项目内模式说明按项目内文档', async ($, on) => {
+        expect(releaseSummaryText({ shared: true, data: false })).toBe('发版配置（release.json）：通用资料目录有，项目资料目录没有；发版工具优先用项目资料目录的')
+        expect(releaseSummaryText({ shared: null, data: true })).toBe('发版配置（release.json）：通用资料目录取不到，项目资料目录有；发版工具优先用项目资料目录的')
+        expect(releaseSummaryText({ shared: false, data: false })).toBe('发版配置（release.json）：通用资料目录没有，项目资料目录没有；用 Jenkins 发版时在项目资料目录配一份，见工作面板 README「发版工具」')
+        expect(releaseSummaryText({ shared: true, data: null })).toBe('发版配置（release.json）：项目内模式，发版按项目内文档')
+        const base = {
+            isRepoMode: false,
+            dir: FG_ROOT,
+            dirName: 'fg-demo',
+            configPath: global.config,
+            displayName: '',
+            tapd: null,
+            systems: {},
+            shared: null,
+            data: null,
+            workflowLabel: '内置 · 前端',
+            fullName: '小黎AI工作台',
+            role: { title: '前端', isDefault: true }
+        }
+        /* 不给 release 时不写这一行（老调用照旧） */
+        expect(projectSummaryText(base)).not.toContain('发版配置')
+        expect(projectSummaryText({ ...base, release: { shared: false, data: true } }).split('\n')[7]).toBe('发版配置（release.json）：通用资料目录没有，项目资料目录有；发版工具优先用项目资料目录的')
+
+        const files = {
+            [global.config]: JSON.stringify(GLOBAL_CONFIG),
+            [`${SHARED}/release.json`]: '{"environments":{}}',
+            [`${global.dir}/release.json`]: '{"environments":{}}'
+        }
+        const { seen } = await boot($, on, { cwd: FG_ROOT, files })
+        const summary = String((await callProject($, { action: 'get' })).result)
+        expect(summary).toContain('\n发版配置（release.json）：通用资料目录有，项目资料目录有；发版工具优先用项目资料目录的\n分支命名：')
+        expect((await runCommand($, 'project')).text).toContain('发版配置（release.json）：通用资料目录有，项目资料目录有')
+        expect(seen.reads.filter(i => /\/(resources\.md|secrets\.env|release\.json)$/.test(i))).toEqual([])
+    })
+
+    test('项目内模式的概况：发版按项目内文档', async ($, on) => {
+        await boot($, on)
+        expect(String((await callProject($, { action: 'get' })).result)).toContain('发版配置（release.json）：项目内模式，发版按项目内文档')
+    })
+
+    test('演练里发版那一环：不发版、问是不是 Jenkins、带着配 release.json、请用户自己填密钥、跑只读的 check；脚本里的 {tools} 换成绝对路径', async ($, on) => {
+        const guide = tourOf().steps.release ?? ''
+        expect(guide.startsWith('不发版、不触发构建。问项目是不是用 Jenkins 发版')).toBe(true)
+        expect(guide).toContain('release.json')
+        expect(guide).toContain('哪些环境受保护')
+        expect(guide).toContain('请用户自己把账号与令牌（<前缀>_URL、<前缀>_ACCOUNT、<前缀>_API_TOKEN）填进 secrets.env')
+        expect(guide).toContain('运行一次只读的 node "{tools}/jenkins.mjs" check')
+        expect(guide).toContain('不是用 Jenkins 的，把发版方式（谁触发、有哪些环境、怎么验收）记进资料')
+        const tour = tourOf()
+        const script = tourScript({
+            tour,
+            deps: { depList: [], skippedCount: 0 },
+            roleTitle: '前端',
+            workflowLabel: '内置 · 前端',
+            stepList: tourStepsOf(tour, 'frontend', builtinOf('frontend').story),
+            sharedDir: SHARED,
+            dataDir: global.dir,
+            overview: '项目：演示',
+            toolsDir: 'D:/mods/xiaoxiaoli/tools'
+        })
+        expect(script).not.toContain('{tools}')
+        expect(script).toContain('11. release 发版\n')
+        expect(script).toContain('运行一次只读的 node "D:/mods/xiaoxiaoli/tools/jenkins.mjs" check --config <release.json>')
+
+        const { files } = await boot($, on, { cwd: FG_ROOT, files: { [global.config]: JSON.stringify(GLOBAL_CONFIG) } })
+        const result = String((await callGuide($, { action: 'start' })).result)
+        expect(result).not.toContain('{tools}')
+        expect(result).toContain(`${TOOL_TAIL}" check --config <release.json>`)
+        expect(parseProgress(files[global.state] ?? '').taskList[0]?.steps.at(-1)?.key).toBe('release')
+    })
+})
+
+/** 返回文字里解析出来的步骤（只看用到的字段） */
+interface WorkflowStepTypeLike {
+    key: string
+    tools?: string
+    rules?: string[]
+}
+
+/** 生效工作流里的发版环节 */
+const releaseOfActive = (active: { workflow: { story: readonly WorkflowStepTypeLike[] } }): WorkflowStepTypeLike => {
+    const step = active.workflow.story.find(i => i.key === 'release')
+    if (step === undefined) throw new Error('没有 release')
+    return step
+}
+
+describe('0.10.0：分支命名', () => {
+    const global = globalFilesOf(FG_ROOT)
+    const PROFILE_PATH = `${GLOBAL_ROOT}/profile.json`
+    const worktree = `${FG_ROOT}-1000102`
+    /** 主会话调一次起名工具、项目工具（新工具不在生成的工具名清单里，按宽松的入参调） */
+    const callSetup = ($: Engine, args: Record<string, unknown>) => $.tool.call({ tool: 'mcp__xiaoxiaoli__setup', ...args } as unknown as ToolCallArgs)
+    const callProject = ($: Engine, args: Record<string, unknown>) => $.tool.call({ tool: 'mcp__xiaoxiaoli__project', ...args } as unknown as ToolCallArgs)
+    /** 先不设过、记了名字段的档案 */
+    const namedProfile = (branchName: string) => JSON.stringify({ version: 1, skipped: true, tour: 'done', branchName })
+    const builtinOf = (role: WorkRole) => {
+        const parsed = parseWorkflow(BUILTIN_WORKFLOW_TEXTS[role])
+        if (!('workflow' in parsed)) throw new Error(`${role} 不合格`)
+        return parsed.workflow
+    }
+    const configOf = (files: Record<string, string>) => JSON.parse(files[global.config] ?? '{}') as Record<string, unknown>
+    /** 本会话开一条（甲），再开第二条（乙）时给新会话命令：返回复制的命令与那时的提示 */
+    const startTwo = async ($: Engine, on: On, files: Record<string, string>, profile?: string) => {
+        const booted = await boot($, on, { cwd: FG_ROOT, files, ...(profile === undefined ? {} : { profile }) })
+        await booted.clock.advance(1)
+        const ui = await mountPane($)
+        await startFromPane(ui, STORY_A)
+        await startFromPane(ui, STORY_B)
+        await ui.unmount()
+        return booted
+    }
+
+    test('名字段：1 到 20 个字符，只许字母、数字与 . - _；档案里合格才认，写回只改 branchName、别的字段保留', () => {
+        expect(checkBranchName(' xiaoli ')).toEqual({ name: 'xiaoli' })
+        expect(checkBranchName('li.x-1_a')).toEqual({ name: 'li.x-1_a' })
+        expect(checkBranchName('')).toEqual({ reason: 'branchName 不能为空' })
+        expect(checkBranchName('a'.repeat(21))).toEqual({ reason: 'branchName 最多 20 个字符，现在是 21 个' })
+        for (const bad of ['xiao li', 'a/b', '小黎', 'a;b', "a'b"]) expect(checkBranchName(bad)).toEqual({ reason: 'branchName 只能含字母、数字与 . - _（不能有空格、/、中文等）' })
+        expect(checkBranchName(3)).toEqual({ reason: 'branchName 要填名字段（文字）' })
+        expect(parseProfile(namedProfile('xiaoli')).branchName).toBe('xiaoli')
+        expect(parseProfile(namedProfile('a b')).branchName).toBeUndefined()
+        expect('branchName' in parseProfile('{"version":1}')).toBe(false)
+        const old = JSON.stringify({ version: 1, name: '小美', role: 'backend', tour: 'done', theme: 'dark' })
+        expect(JSON.parse(profileText(old, { branchName: 'xiaoli' }))).toEqual({ version: 1, name: '小美', role: 'backend', tour: 'done', theme: 'dark', branchName: 'xiaoli' })
+        expect(JSON.parse(profileText(old, { role: 'test', branchName: 'li' }))).toEqual({ version: 1, name: '小美', role: 'test', tour: 'done', theme: 'dark', branchName: 'li' })
+        expect(JSON.parse(profileText(JSON.stringify({ version: 1, skipped: true, branchName: 'old' }), { name: '小丽' }))).toEqual({ version: 1, name: '小丽', branchName: 'old' })
+    })
+
+    test('分支名自检：空段、连着的分隔符、开头结尾是分隔符、空格、git 不允许的字符、..、.lock 都不合格；正常的团队写法合格', () => {
+        for (const good of ['feat/1000001', 'fix/1000001', 'v9.0/xiaoli_1000001_login-page', 'release/v1.2.3', 'feature/ABC-123']) expect(branchNameProblem(good)).toBe('')
+        expect(branchNameProblem('')).toBe('分支名是空的')
+        expect(branchNameProblem('v9.0/_123_x')).toBe('分支名不能有连着的分隔符（有空段，如 v9.0/_123_x、a//b、a__b）')
+        expect(branchNameProblem('a//b')).toBe('分支名不能有连着的分隔符（有空段，如 v9.0/_123_x、a//b、a__b）')
+        expect(branchNameProblem('a__b')).toBe('分支名不能有连着的分隔符（有空段，如 v9.0/_123_x、a//b、a__b）')
+        expect(branchNameProblem('_a/1')).toBe('分支名不能以分隔符开头或结尾（有空段）')
+        expect(branchNameProblem('feat/1_')).toBe('分支名不能以分隔符开头或结尾（有空段）')
+        expect(branchNameProblem('feat/1 2')).toBe('分支名不能有空格')
+        for (const bad of ['a~b', 'a^b', 'a:b', 'a?b', 'a*b', 'a[b', 'a\\b', 'a@{b']) expect(branchNameProblem(bad)).toBe('分支名只能含字母、数字与 . _ / -')
+        expect(branchNameProblem('a..b')).toBe('分支名不能有 ..')
+        expect(branchNameProblem('feat/x.lock')).toBe('分支名的每段不能以 . 开头、不能以 .lock 结尾')
+    })
+
+    test('模板：{id} 必须有、{name} 也认；拼分支名时缺名字段不拼、拼出来不合格不拼；没有 {name} 的旧模板照旧', () => {
+        expect(isBranchTemplate('v9.0/{name}_{id}')).toBe(true)
+        expect(isBranchTemplate('feat/{id}')).toBe(true)
+        expect(isBranchTemplate('v9.0/{name}')).toBe(false)
+        expect(isBranchTemplate('feat/{who}_{id}')).toBe(false)
+        expect(planBranch('v9.0/{name}_{id}', { id: '1000102', name: 'xiaoli' })).toEqual({ branch: 'v9.0/xiaoli_1000102' })
+        expect(planBranch('v9.0/{name}_{id}', { id: '1000102', name: '' })).toEqual({ reason: MISSING_NAME_TEXT, isNameMissing: true })
+        expect(planBranch('feat/{id}', { id: '1000102', name: '' })).toEqual({ branch: 'feat/1000102' })
+        expect(planBranch('v9.0/{name}__{id}', { id: '1000102', name: 'xiaoli' })).toEqual({
+            reason: '按模板 v9.0/{name}__{id} 拼出的分支名 v9.0/xiaoli__1000102 不合格：分支名不能有连着的分隔符（有空段，如 v9.0/_123_x、a//b、a__b）',
+            isNameMissing: false
+        })
+        expect(branchOf('v9.0/{name}_{id}', '1', 'li')).toBe('v9.0/li_1')
+        expect(branchTemplateProblem('v9.0/{name}_{id}', 'branchTemplate')).toBe('')
+        expect(branchTemplateProblem('feat/x; rm', 'branchTemplate')).toBe('branchTemplate 要含 {id}，且只能含字母、数字与 . _ / -')
+        expect(branchTemplateProblem('v9.0/_{id}', 'branchTemplate')).toBe(
+            'branchTemplate 不合格：用示例值拼出的分支名 v9.0/_1000001 不合格：分支名不能有连着的分隔符（有空段，如 v9.0/_123_x、a//b、a__b）'
+        )
+        /* bind 工具同一套校验：带 {name} 的模板能绑，v9.0/_{id} 这类一拼就有空段的拒绝 */
+        expect(toBindInput({ project: 'x', branchTemplate: 'v9.0/{name}_{id}' })).toMatchObject({ branchTemplate: 'v9.0/{name}_{id}' })
+        expect(toBindInput({ project: 'x', bugBranchTemplate: 'v9.0/_{id}' })).toBe(
+            'bugBranchTemplate 不合格：用示例值拼出的分支名 v9.0/_1000001 不合格：分支名不能有连着的分隔符（有空段，如 v9.0/_123_x、a//b、a__b）'
+        )
+        /* 项目配置里存着 {name} 的模板能读出来（以前会退回默认） */
+        expect(parseConfig(JSON.stringify({ ...GLOBAL_CONFIG, branchTemplate: 'v9.0/{name}_{id}' }))?.branchTemplate).toBe('v9.0/{name}_{id}')
+        expect(parseConfig(JSON.stringify({ ...GLOBAL_CONFIG, branchTemplate: 'feature/{id}' }))?.branchTemplate).toBe('feature/{id}')
+    })
+
+    test('project 工具 set 的分支设置：模板与起点的校验同 bind，传空字符串清掉回到默认，别的字段原样保留；概况与命令里的说法', () => {
+        expect(toProjectChange({ branchTemplate: 'v9.0/{name}_{id}', bugBranchTemplate: 'v9.0/{name}_{id}', branchBase: 'origin/dev' })).toEqual({
+            branchTemplate: 'v9.0/{name}_{id}',
+            bugBranchTemplate: 'v9.0/{name}_{id}',
+            branchBase: 'origin/dev'
+        })
+        expect(toProjectChange({ branchTemplate: 'v9.0/{name}' })).toBe('branchTemplate 要含 {id}，且只能含字母、数字与 . _ / -')
+        expect(toProjectChange({ branchBase: 'origin/dev && x' })).toBe('branchBase 只能含字母、数字与 . _ / -')
+        expect(toProjectChange({ branchTemplate: '' })).toEqual({ branchTemplate: '' })
+        const old = JSON.stringify({ ...GLOBAL_CONFIG, displayName: '演示', branchBase: 'origin/dev', bugBranchTemplate: 'bug/{id}' })
+        expect(JSON.parse(projectConfigText(old, { branchTemplate: 'v9.0/{name}_{id}', bugBranchTemplate: '' }))).toEqual({
+            ...GLOBAL_CONFIG,
+            displayName: '演示',
+            branchBase: 'origin/dev',
+            branchTemplate: 'v9.0/{name}_{id}'
+        })
+        expect(branchSettingsOf('')).toEqual({ branchTemplate: 'feat/{id}', bugBranchTemplate: 'fix/{id}', branchBase: 'origin/master' })
+        expect(branchSettingsOf(JSON.stringify({ branchTemplate: 'v9.0/{name}_{id}', branchBase: 'bad base' }))).toEqual({ branchTemplate: 'v9.0/{name}_{id}', bugBranchTemplate: 'fix/{id}', branchBase: 'origin/master' })
+        const team = { branchTemplate: 'v9.0/{name}_{id}', bugBranchTemplate: 'v9.0/{name}_{id}', branchBase: 'origin/dev' }
+        expect(branchSummaryText(team, 'xiaoli')).toBe('分支命名：需求模板 v9.0/{name}_{id}，缺陷模板 v9.0/{name}_{id}，起点 origin/dev；名字段 xiaoli；示例：需求 v9.0/xiaoli_1000001，缺陷 v9.0/xiaoli_1000001')
+        expect(branchSummaryText(team, '')).toBe(
+            '分支命名：需求模板 v9.0/{name}_{id}，缺陷模板 v9.0/{name}_{id}，起点 origin/dev；名字段没记（模板里用到了，面板不生成启动命令）；示例：需求 拼不出（还没记下名字段），缺陷 拼不出（还没记下名字段）'
+        )
+    })
+
+    test('开新会话：模板里有 {name} 而档案里没记名字段时不生成启动命令、不写状态文件，如实提示怎么办；记了就照模板拼', async ($, on) => {
+        const files = { [global.config]: JSON.stringify({ ...GLOBAL_CONFIG, branchTemplate: 'v9.0/{name}_{id}' }) }
+        const { seen } = await startTwo($, on, files)
+        expect(seen.copied).toEqual([])
+        expect(seen.written).toEqual([global.state])
+        expect(seen.toasts.at(-1)).toBe(`小黎：没开工，${MISSING_NAME_TEXT}，没有生成启动命令；${SET_NAME_HINT}`)
+        expect(parseProgress(files[global.state] ?? '').taskList.map(i => i.id)).toEqual(['1000101'])
+    })
+
+    test('开新会话：记了名字段时启动命令按模板建分支（v9.0/<名字段>_<ID>），条目记上这个分支', async ($, on) => {
+        const files = { [global.config]: JSON.stringify({ ...GLOBAL_CONFIG, branchTemplate: 'v9.0/{name}_{id}' }) }
+        const { seen } = await startTwo($, on, files, namedProfile('xiaoli'))
+        const command = seen.copied[0] ?? ''
+        expect(command.startsWith(`if (-not (Test-Path '${worktree}')) { git -C '${FG_ROOT}' worktree add --no-track -b v9.0/xiaoli_1000102 '${worktree}' origin/master }`)).toBe(true)
+        expect(command).toContain('，分支 v9.0/xiaoli_1000102；')
+        expect(parseProgress(files[global.state] ?? '').taskList.find(i => i.id === '1000102')?.branch).toBe('v9.0/xiaoli_1000102')
+    })
+
+    test('开新会话：没有 {name} 的旧模板照旧（不看名字段，起点照配置）', async ($, on) => {
+        const oldFiles = { [global.config]: JSON.stringify({ ...GLOBAL_CONFIG, branchTemplate: 'feature/{id}', branchBase: 'origin/dev' }) }
+        const old = await startTwo($, on, oldFiles)
+        expect((old.seen.copied[0] ?? '').startsWith(`if (-not (Test-Path '${worktree}')) { git -C '${FG_ROOT}' worktree add --no-track -b feature/1000102 '${worktree}' origin/dev }`)).toBe(true)
+    })
+
+    test('开新会话：模板拼出来有连着的分隔符（如名字段后紧跟 _ 又写了 _）时不生成命令，提示原因与怎么改', async ($, on) => {
+        const files = { [global.config]: JSON.stringify({ ...GLOBAL_CONFIG, branchTemplate: 'v9.0/{name}__{id}' }) }
+        const { seen } = await startTwo($, on, files, namedProfile('xiaoli'))
+        expect(seen.copied).toEqual([])
+        expect(seen.toasts.at(-1)).toBe(
+            '小黎：没开工，按模板 v9.0/{name}__{id} 拼出的分支名 v9.0/xiaoli__1000102 不合格：分支名不能有连着的分隔符（有空段，如 v9.0/_123_x、a//b、a__b），没有生成启动命令；对 AI 说「改一下分支模板」，或输入 /xiaoxiaoli branch 看现在的模板'
+        )
+    })
+
+    test('setup 工具设 branchName：成功时写进档案（别的字段保留）并回一句；不合格如实拒绝不写入', async ($, on) => {
+        const { files } = await boot($, on, { cwd: FG_ROOT, files: { [global.config]: JSON.stringify(GLOBAL_CONFIG) } })
+        const ok = await callSetup($, { branchName: 'xiaoli' })
+        expect(String(ok.result)).toBe(`分支名里的名字段：xiaoli（分支模板的 {name} 换成它，各项目通用）（已写入 ${PROFILE_PATH}）`)
+        expect(JSON.parse(files[PROFILE_PATH] ?? '{}')).toEqual({ version: 1, skipped: true, tour: 'done', branchName: 'xiaoli' })
+        const both = await callSetup($, { role: 'backend', branchName: 'li' })
+        expect(String(both.result)).toContain('分支名里的名字段：li')
+        expect(JSON.parse(files[PROFILE_PATH] ?? '{}')).toMatchObject({ role: 'backend', branchName: 'li' })
+        const bad = await callSetup($, { branchName: 'xiao li' })
+        expect(bad.deny).toBe('小黎：参数不对，branchName 只能含字母、数字与 . - _（不能有空格、/、中文等），没有写入')
+        expect(JSON.parse(files[PROFILE_PATH] ?? '{}').branchName).toBe('li')
+    })
+
+    test('project 工具 set 分支设置：成功时写全局项目配置并回现在的模板与示例；不合格、项目内模式如实拒绝', async ($, on) => {
+        const files = { [global.config]: JSON.stringify(GLOBAL_CONFIG) }
+        await boot($, on, { cwd: FG_ROOT, files, profile: namedProfile('xiaoli') })
+        const ok = await callProject($, { action: 'set', branchTemplate: 'v9.0/{name}_{id}', bugBranchTemplate: 'v9.0/{name}_{id}', branchBase: 'origin/dev' })
+        expect(String(ok.result)).toBe(
+            `已更新本项目配置（${global.config}）：显示名没设（用目录名 fg-demo）；用到的系统：没记（没写的系统都按用到处理）；分支命名：需求模板 v9.0/{name}_{id}，缺陷模板 v9.0/{name}_{id}，起点 origin/dev；名字段 xiaoli；示例：需求 v9.0/xiaoli_1000001，缺陷 v9.0/xiaoli_1000001（从下一次开新会话起生效）`
+        )
+        expect(configOf(files)).toEqual({ ...GLOBAL_CONFIG, branchTemplate: 'v9.0/{name}_{id}', bugBranchTemplate: 'v9.0/{name}_{id}', branchBase: 'origin/dev' })
+        const bad = await callProject($, { action: 'set', branchTemplate: 'v9.0/_{id}' })
+        expect(bad.deny).toBe('小黎：参数不对，branchTemplate 不合格：用示例值拼出的分支名 v9.0/_1000001 不合格：分支名不能有连着的分隔符（有空段，如 v9.0/_123_x、a//b、a__b），没有写入')
+        const reset = await callProject($, { action: 'set', bugBranchTemplate: '' })
+        expect(String(reset.result)).toContain('缺陷模板 fix/{id}')
+        expect(configOf(files).bugBranchTemplate).toBeUndefined()
+    })
+
+    test('项目内模式：project 工具不往项目仓库写分支设置，说明直接编辑项目内配置', async ($, on) => {
+        await boot($, on)
+        expect((await callProject($, { action: 'set', branchTemplate: 'feature/{id}' })).deny).toBe(
+            `小黎：本项目用项目内配置 ${CONFIG_FILE}，分支设置写在那份文件里，本工具不往项目仓库写，没有写入；要改请直接编辑它的 branchTemplate 等字段`
+        )
+    })
+
+    test('/xiaoxiaoli branch：不带参数看现在的模板、名字段与示例；name、template、bug、base 直接改；不合格、认不出的子命令如实说', async ($, on) => {
+        const files = { [global.config]: JSON.stringify(GLOBAL_CONFIG) }
+        await boot($, on, { cwd: FG_ROOT, files })
+        const usage = '改法：/xiaoxiaoli branch name <名字段> · branch template <需求模板> · branch bug <缺陷模板> · branch base <起点>；模板里 {id} 必须有、{name} 换成名字段；也可以对 AI 说「照我以前的分支起名」'
+        expect((await runCommand($, 'branch')).text).toBe(`小黎：分支命名：需求模板 feat/{id}，缺陷模板 fix/{id}，起点 origin/master；名字段没记；示例：需求 feat/1000001，缺陷 fix/1000001\n${usage}`)
+        expect((await runCommand($, 'branch template v9.0/{name}_{id}')).text).toBe(
+            `小黎：已改（写入 ${global.config}），从下一次开新会话起生效；分支命名：需求模板 v9.0/{name}_{id}，缺陷模板 fix/{id}，起点 origin/master；名字段没记（模板里用到了，面板不生成启动命令）；示例：需求 拼不出（还没记下名字段），缺陷 fix/1000001`
+        )
+        expect((await runCommand($, 'branch name xiaoli')).text).toBe(
+            `小黎：已记下名字段 xiaoli（写入 ${PROFILE_PATH}，各项目通用）；分支命名：需求模板 v9.0/{name}_{id}，缺陷模板 fix/{id}，起点 origin/master；名字段 xiaoli；示例：需求 v9.0/xiaoli_1000001，缺陷 fix/1000001`
+        )
+        expect((await runCommand($, 'branch bug v9.0/{name}_{id}')).text).toContain('缺陷模板 v9.0/{name}_{id}')
+        expect((await runCommand($, 'branch base origin/dev')).text).toContain('起点 origin/dev')
+        expect(configOf(files)).toMatchObject({ branchTemplate: 'v9.0/{name}_{id}', bugBranchTemplate: 'v9.0/{name}_{id}', branchBase: 'origin/dev' })
+        expect(JSON.parse(files[PROFILE_PATH] ?? '{}').branchName).toBe('xiaoli')
+        expect((await runCommand($, 'branch name')).text).toContain('名字段 xiaoli')
+        expect((await runCommand($, 'branch name 小黎')).text).toBe('小黎：没改，branchName 只能含字母、数字与 . - _（不能有空格、/、中文等）')
+        expect((await runCommand($, 'branch template v9.0/_{id}')).text).toBe(
+            '小黎：没改，branchTemplate 不合格：用示例值拼出的分支名 v9.0/_1000001 不合格：分支名不能有连着的分隔符（有空段，如 v9.0/_123_x、a//b、a__b）'
+        )
+        expect((await runCommand($, 'branch constructor x')).text).toBe(`小黎：没改，branch 后面只认 name、template、bug、base；${usage}`)
+        expect((await runCommand($, 'nonsense')).text).toContain(' · branch 看分支命名（branch name / template / bug / base <值> 直接改名字段、模板与起点）')
+    })
+
+    test('概况里的分支命名一行：模板、起点、名字段与示例（没绑 TAPD 也照项目配置原文显示）', async ($, on) => {
+        const files = { [global.config]: JSON.stringify({ branchTemplate: 'v9.0/{name}_{id}' }) }
+        await boot($, on, { cwd: FG_ROOT, files, profile: namedProfile('xiaoli') })
+        expect(String((await callProject($, { action: 'get' })).result)).toContain(
+            '\n分支命名：需求模板 v9.0/{name}_{id}，缺陷模板 fix/{id}，起点 origin/master；名字段 xiaoli；示例：需求 v9.0/xiaoli_1000001，缺陷 fix/1000001\n工作流：'
+        )
+    })
+
+    test('前端、后端、Python 的建分支环节：先看资料、再学用户自己的分支（给出只读命令）、归纳、记下并设进模板、学不到问名字段、建之前自检、起点 --no-track', () => {
+        expect(builtinOf('frontend').story.map(i => i.key)).toEqual(STORY_STEPS.map(i => i.key))
+        for (const role of ['frontend', 'backend', 'python'] as const) {
+            const step = builtinOf(role).story.find(i => i.key === 'branch')
+            const rules = (step?.rules ?? []).join('\n')
+            expect(step?.title).toBe('建分支')
+            expect(rules).toContain('「分支命名规则」的直接照用')
+            expect(rules).toContain('git config user.name 与 git config user.email 认人')
+            expect(rules).toContain('git for-each-ref --sort=-committerdate --count=200 --format="%(refname:short)|%(authorname)|%(authoremail)" refs/heads refs/remotes')
+            expect(rules).toContain('有没有版本或迭代前缀、有没有人名段及它的值、需求 ID 在哪')
+            expect(rules).toContain('缺陷分支写法不同的分开归纳')
+            expect(rules).toContain('因人而异的段（人名、缩写）问用户一次')
+            expect(rules).toContain('人名段这类跨项目通用的值记进通用资料目录')
+            expect(rules).toContain('mcp__xiaoxiaoli__project 的 set 设 branchTemplate、bugBranchTemplate')
+            expect(rules).toContain('mcp__xiaoxiaoli__setup 设 branchName')
+            expect(rules).toContain('面板的启动命令里不带')
+            expect(rules).toContain('换迭代时说一声')
+            expect(rules).toContain('不能有空段或连着的分隔符（如 v9.0/_123_x、a//b、a__b）')
+            expect(rules).toContain('拿不准就问')
+            expect(rules).toContain('默认 origin/master；以远程分支为起点建分支必须加 --no-track')
+        }
+    })
+
+    test('演练里建分支那一环：不建分支，看用户以前的分支归纳写法并确认，学不到问名字段，记进资料并设进模板，举一个例子', () => {
+        const parsed = parseTour(GUIDE_TEXTS.tour)
+        if (!('tour' in parsed)) throw new Error(parsed.reason)
+        const guide = parsed.tour.steps.branch ?? ''
+        expect(guide.startsWith('不建分支。按建分支环节的办法在仓库里看一眼这个用户以前的分支')).toBe(true)
+        expect(guide).toContain('git for-each-ref --sort=-committerdate')
+        expect(guide).toContain('讲给用户听并确认')
+        expect(guide).toContain('问一次他的名字段')
+        expect(guide).toContain('mcp__xiaoxiaoli__project 的 set 设 branchTemplate、bugBranchTemplate，mcp__xiaoxiaoli__setup 设 branchName')
+        expect(guide).toContain('举一个「真实开工时会建成什么名字」的例子')
     })
 })

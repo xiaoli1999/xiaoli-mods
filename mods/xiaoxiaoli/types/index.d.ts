@@ -178,7 +178,7 @@ export interface WorkbenchConfigType {
     statePath?: string
     /** 自动刷新待办的间隔，分钟 */
     refreshMinutes: number
-    /** 新会话开工时的分支名模板，{id} 换成短 ID，默认 feat/{id} */
+    /** 新会话开工时的分支名模板，{id} 换成短 ID（必须有），{name} 换成档案里的名字段，默认 feat/{id} */
     branchTemplate: string
     /** 缺陷的分支名模板，默认 fix/{id} */
     bugBranchTemplate: string
@@ -350,6 +350,11 @@ export interface ProfileType {
     role: WorkRole | ''
     /** 演练处理过没有（文件里的 tour）：没处理过不写，这时起了名（或先不设）的面板上出「走一遍演练」两行 */
     tour?: TourStateType
+    /**
+     * 分支名里的名字段（文件里的 branchName）：分支模板的 {name} 换成它，一个人在各项目通用；没记或不合格不写。
+     * 模板里有 {name} 而这里没有时，面板不生成新会话的启动命令
+     */
+    branchName?: string
 }
 
 /** 演练的处理结果：done 走过（含中途叫停），declined 在面板上选了「不用了」 */
