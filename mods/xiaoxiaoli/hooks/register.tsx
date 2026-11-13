@@ -62,7 +62,6 @@ import {
 } from './layout'
 import {
     PASTE_TEXT,
-    branchOf,
     docsDirOf,
     herePrompt,
     hereSessionCommand,
@@ -77,6 +76,7 @@ import {
     worktreeOf
 } from './launch'
 import {
+    BRANCH_FIELDS,
     RELEASE_FILE,
     RESOURCE_FILES,
     SHARED_DIR,
@@ -126,6 +126,7 @@ import {
     workflowText
 } from './workflow'
 import { bindConfigText, globalPlaceOf, globalRootOf, joinDir, matchProject, toBindInput, unbindConfigText } from './binding'
+import { SET_NAME_HINT, branchSettingsOf, branchSummaryText, planBranch } from './branch'
 import type { BranchFieldsType } from './binding'
 import {
     DEFAULT_NAME,
@@ -135,6 +136,7 @@ import {
     ROLE_TITLES,
     TOUR_SUMMARY_LIMIT,
     WORK_ROLES,
+    checkBranchName,
     checkName,
     fullNameOf,
     guidedByOf,
@@ -224,7 +226,8 @@ const USAGE_TEXT = [
     ' · setup 让 AI 引导给工作台起名（没绑定 TAPD 的项目顺带问绑定） · name <名字> 直接改名',
     ` · role <工种> 设工种（${ROLE_CHOICES_TEXT}）`,
     ' · project 看本项目的配置概况（显示名、TAPD、用到的系统、资料目录）',
-    ' · tour 让 AI 带你走一遍演练（体检本机环境、按工作流模拟走一遍、讲功能点）'
+    ' · tour 让 AI 带你走一遍演练（体检本机环境、按工作流模拟走一遍、讲功能点）',
+    ' · branch 看分支命名（branch name / template / bug / base <值> 直接改名字段、模板与起点）'
 ].join('')
 /** 本项目记着不用 TAPD（systems.tapd 为 false）时 refresh 的说法 */
 const TAPD_OFF_REPLY = '本项目记着不用 TAPD（systems.tapd 为 false），不列 TAPD 项目、不拉待办，进行中区照常；要用时对 AI 说「这个项目用 TAPD」'
@@ -244,18 +247,21 @@ const AUTO_GUIDE_DELAY_MS = 3000
 /** 取不到全局根目录时起名入口的说法：沿用绑定那句，再说明名字存不了 */
 const NO_PROFILE_TEXT = `${NO_GLOBAL_ROOT_TEXT}，起的名字存不了，先用默认名「${DEFAULT_NAME}」`
 const SETUP_DESCRIPTION = [
-    'AI 工作台：给工作台起名或改名、设工种，写进全局档案（~/.claude/xiaoxiaoli/profile.json），不分项目，所有项目共用。',
+    'AI 工作台：给工作台起名或改名、设工种、记分支名里的名字段，写进全局档案（~/.claude/xiaoxiaoli/profile.json），不分项目，所有项目共用。',
     '名字：工作面板的标题栏、提示前缀与 TAPD 评论署名随之换成「名字+AI工作台」。工种：没有自定义工作流时开工用哪套内置工作流，测试、产品、其他开工不建分支。',
     '用户说「给工作台改名」「工作台叫某某」「我是做后端的」，或按 /xiaoxiaoli setup 发来的设置引导问到名字与工种时调用。',
-    'name 与 role 至少给一个。name 只填名字本身，如「小美」（全称就是「小美AI工作台」），带了「AI工作台」「工作台」后缀会自动去掉；',
+    'name 只填名字本身，如「小美」（全称就是「小美AI工作台」），带了「AI工作台」「工作台」后缀会自动去掉；',
     `1 到 12 个字符，不能含换行、制表等控制字符与 < > & " ' 这五个字符；想恢复默认就传「${DEFAULT_NAME}」。`,
-    'role 取 frontend 前端、backend 后端、python、test 测试、product 产品、other 其他。'
+    'role 取 frontend 前端、backend 后端、python、test 测试、product 产品、other 其他。',
+    'branchName：用户在分支名里用的名字段（如团队分支「v9.0/xiaoli_1001_desc」里的 xiaoli），分支模板的 {name} 换成它，存在同一份档案、各项目通用；',
+    '1 到 20 个字符，只许字母、数字与 . - _；从仓库里学出用户的分支写法、或问到他的名字段后调用。name、role、branchName 至少给一个。'
 ].join('')
 const SETUP_SCHEMA = {
     type: 'object',
     properties: {
         name: { type: 'string', description: '工作台名字，不含「AI工作台」后缀，如「小美」；只改工种时不传' },
-        role: { type: 'string', enum: [...WORK_ROLES], description: '工种；只改名字时不传' }
+        role: { type: 'string', enum: [...WORK_ROLES], description: '工种；只改名字时不传' },
+        branchName: { type: 'string', description: '可选：分支名里的名字段（分支模板的 {name}），如 xiaoli；1 到 20 个字符，只许字母、数字与 . - _' }
     },
     required: []
 }
@@ -275,10 +281,14 @@ const PROJECT_DESCRIPTION = [
     'AI 工作台：查看与修改当前项目的配置差异，存在全局项目目录的 config.json（~/.claude/xiaoxiaoli/projects/<项目键>/config.json），不往项目仓库写文件。',
     '用户说「这个项目显示成某某」「这个项目不用 TAPD」「这个项目用语雀 / 不用 figma」，或你需要了解本项目配置概况时调用。',
     'action=get：一次返回显示名与目录名、绑定的 TAPD 项目、systems、通用资料目录（~/.claude/xiaoxiaoli/shared）与项目资料目录的位置、',
-    '两处 resources.md 与 secrets.env 在不在（不读内容）、两处发版配置 release.json 在不在（发版工具读，优先用项目的）、生效工作流的来源、工作台名字与工种。',
+    '两处 resources.md 与 secrets.env 在不在（不读内容）、两处发版配置 release.json 在不在（发版工具读，优先用项目的）、',
+    '分支命名（需求与缺陷的分支模板、起点、名字段与拼出来的示例）、生效工作流的来源、工作台名字与工种。',
     'action=set：displayName 改工作面板上显示的项目名（1 到 20 个字符，传空字符串清掉、回到目录名）；systems 与已有的合并，值 true 用、false 不用、null 去掉（回到没说，按用到处理），',
     `约定的键 ${SYSTEM_KEYS.join('、')}，别的键也照存。只有 tapd=false 会让工作面板不列 TAPD 项目、不拉待办（之后绑定 TAPD 项目时自动改回 true）；`,
     '其余键本 mod 不解释，供你判断哪些环节跳过（如 yuque=false 时不读语雀）。各项目通用的资料（resources.md、secrets.env）放通用资料目录，和通用不一样的放项目资料目录。',
+    'branchTemplate、bugBranchTemplate：工作面板开新会话时需求、缺陷分支名的模板，占位符 {id}（必须有，换成需求短 ID）与 {name}（换成档案里的名字段，用 mcp__xiaoxiaoli__setup 的 branchName 设），',
+    '其余只许字母、数字与 . _ / -，拼出来不能有空段或连着的分隔符；branchBase：新分支的起点，默认 origin/master；三者传空字符串清掉、回到默认。',
+    '从仓库里学出用户的分支写法后，把能用模板表达的部分设进来（如 v9.0/{name}_{id}），每条需求不同的描述模板表达不了、不写。',
     '项目内模式（项目里有 docs/xiaoli/local/workbench/config.json）不支持 set。'
 ].join('')
 const GUIDE_DESCRIPTION = [
@@ -304,7 +314,10 @@ const PROJECT_SCHEMA = {
     properties: {
         action: { type: 'string', enum: ['get', 'set'] },
         displayName: { type: 'string', description: 'set 时可选：工作面板上显示的项目名，传空字符串清掉' },
-        systems: { type: 'object', description: 'set 时可选：如 { "tapd": false, "yuque": true }，值 null 去掉该键' }
+        systems: { type: 'object', description: 'set 时可选：如 { "tapd": false, "yuque": true }，值 null 去掉该键' },
+        branchTemplate: { type: 'string', description: 'set 时可选：需求分支名模板，如 v9.0/{name}_{id}；{id} 必须有，传空字符串回到默认 feat/{id}' },
+        bugBranchTemplate: { type: 'string', description: 'set 时可选：缺陷分支名模板，如 v9.0/{name}_{id}；传空字符串回到默认 fix/{id}' },
+        branchBase: { type: 'string', description: 'set 时可选：新分支的起点，如 origin/dev；传空字符串回到默认 origin/master' }
     },
     required: ['action']
 }
@@ -1142,7 +1155,13 @@ const offerNewSession = async ($: Dollar, plan: StartPlanType): Promise<void> =>
 
     const kind = entry?.kind ?? kindOf(todo)
     const worktree = worktreeOf(place.dir, id)
-    const branch = branchOf(kind === 'bug' ? current.bugBranchTemplate : current.branchTemplate, id)
+    /* 模板里的 {name} 取档案里的名字段：没记时不拿空值去拼，拼出来过不了分支名自检也不生成，两种都不写状态文件 */
+    const planned = planBranch(kind === 'bug' ? current.bugBranchTemplate : current.branchTemplate, { id, name: (await loadProfile($)).branchName ?? '' })
+    if ('reason' in planned) {
+        const how = planned.isNameMissing ? `；${SET_NAME_HINT}` : '；对 AI 说「改一下分支模板」，或输入 /xiaoxiaoli branch 看现在的模板'
+        return $.ui.toast(await say($, `没开工，${planned.reason}，没有生成启动命令${how}`))
+    }
+    const branch = planned.branch
     const sessionId = crypto.randomUUID()
     const fullName = fullNameOf(await currentName($))
     const sharedDir = place.mode === 'global' ? await ensureSharedDir($) : ''
@@ -1468,7 +1487,8 @@ const roleEffectText = (role: WorkRole, active: ActiveWorkflowType): string => {
  * @returns 给模型的结果，不能写时为 deny
  */
 const runSetupTool = async ($: Dollar, raw: Record<string, unknown>): Promise<{ result: string } | { deny: string }> => {
-    if (raw.name === undefined && raw.role === undefined) return { deny: await say($, '参数不对，name 与 role 至少给一个，没有写入') }
+    const NONE_TEXT = '参数不对，name、role 与 branchName 至少给一个，没有写入'
+    if (raw.name === undefined && raw.role === undefined && raw.branchName === undefined) return { deny: await say($, NONE_TEXT) }
 
     const checked = raw.name === undefined ? undefined : checkName(raw.name)
     if (checked !== undefined && 'reason' in checked) return { deny: await say($, `参数不对，${checked.reason}，没有写入`) }
@@ -1476,10 +1496,20 @@ const runSetupTool = async ($: Dollar, raw: Record<string, unknown>): Promise<{ 
     const role = raw.role === undefined ? undefined : toRole(raw.role)
     if (raw.role !== undefined && role === undefined) return { deny: await say($, `参数不对，${ROLE_WRONG_TEXT}，没有写入`) }
 
-    /* 走到这里 name 与 role 至少有一个合格 */
+    const branchChecked = raw.branchName === undefined ? undefined : checkBranchName(raw.branchName)
+    if (branchChecked !== undefined && 'reason' in branchChecked) return { deny: await say($, `参数不对，${branchChecked.reason}，没有写入`) }
+    const branchName = branchChecked === undefined ? {} : { branchName: branchChecked.name }
+
+    /* 走到这里 name、role、branchName 至少有一个合格 */
     const change: ProfileChangeType | undefined =
-        checked !== undefined ? { name: checked.name, ...(role === undefined ? {} : { role }) } : role === undefined ? undefined : { role }
-    if (change === undefined) return { deny: await say($, '参数不对，name 与 role 至少给一个，没有写入') }
+        checked !== undefined
+            ? { name: checked.name, ...(role === undefined ? {} : { role }), ...branchName }
+            : role !== undefined
+              ? { role, ...branchName }
+              : branchChecked !== undefined
+                ? { branchName: branchChecked.name }
+                : undefined
+    if (change === undefined) return { deny: await say($, NONE_TEXT) }
 
     const saved = await saveProfile($, change)
     if ('reason' in saved) return { deny: await say($, `${saved.reason}，没有写入`) }
@@ -1488,7 +1518,8 @@ const runSetupTool = async ($: Dollar, raw: Record<string, unknown>): Promise<{ 
 
     const partList = [
         ...(checked === undefined ? [] : [`工作台现在叫 ${fullNameOf(checked.name)}`]),
-        ...(role === undefined ? [] : [roleEffectText(role, await loadWorkflow($))])
+        ...(role === undefined ? [] : [roleEffectText(role, await loadWorkflow($))]),
+        ...(branchChecked === undefined ? [] : [`分支名里的名字段：${branchChecked.name}（分支模板的 {name} 换成它，各项目通用）`])
     ]
     const nameNote = checked === undefined ? '' : '；工作面板标题栏、提示前缀与 TAPD 评论署名已换成新名字'
     return { result: `${partList.join('；')}（已写入 ${saved.path}${nameNote}）` }
@@ -1918,6 +1949,8 @@ const projectSummary = async ($: Dollar): Promise<string> => {
             shared: sharedDir === '' ? null : await existsSafe($, joinDir(sharedDir, RELEASE_FILE)),
             data: isRepoMode || place === null ? null : await existsSafe($, joinDir(place.dataDir, RELEASE_FILE))
         },
+        /* 分支设置从项目配置的原文读（没绑 TAPD 时也能看），名字段取档案 */
+        branch: { settings: branchSettingsOf(place === null ? '' : await readText($, place.configPath)), name: state.branchName ?? '' },
         workflowLabel: active.label,
         fullName: fullNameOf(nameOf(state)),
         role: { title: ROLE_TITLES[roleOf(state)], isDefault: state.role === '' },
@@ -2077,8 +2110,12 @@ const runProjectTool = async ($: Dollar, raw: Record<string, unknown>): Promise<
 
     await loadConfig($)
     const place = await read($, workplace)
+    const hasBranch = BRANCH_FIELDS.some(i => change[i] !== undefined)
     if ((await readGlobalRoot($)) === '') return { deny: await say($, `${NO_GLOBAL_ROOT_TEXT}，没有写入`) }
     if (place === null) return { deny: await say($, '还没定下当前项目，稍后再试，没有写入') }
+    if (place.mode !== 'global' && hasBranch) {
+        return { deny: await say($, `本项目用项目内配置 ${place.configPath}，分支设置写在那份文件里，本工具不往项目仓库写，没有写入；要改请直接编辑它的 branchTemplate 等字段`) }
+    }
     if (place.mode !== 'global') {
         return { deny: await say($, `本项目用项目内配置 ${place.configPath}，显示名与 systems 只存在全局项目目录，项目内模式不支持，没有写入`) }
     }
@@ -2103,11 +2140,70 @@ const runProjectTool = async ($: Dollar, raw: Record<string, unknown>): Promise<
         : wasTapdOff
           ? '；工作面板恢复拉 TAPD'
           : ''
-    return { result: `已更新本项目配置（${place.configPath}）：${name}；用到的系统：${systemsText(next?.systems ?? {})}${tapdNote}` }
+    /* 改了分支设置时多说一句现在的模板、名字段与拼出来的示例，从下一次开新会话起生效 */
+    const branchNote = hasBranch
+        ? `；${branchSummaryText(branchSettingsOf(await readText($, place.configPath)), (await loadProfile($)).branchName ?? '')}（从下一次开新会话起生效）`
+        : ''
+    return { result: `已更新本项目配置（${place.configPath}）：${name}；用到的系统：${systemsText(next?.systems ?? {})}${tapdNote}${branchNote}` }
 }
 
 /** 项目工具的钩子本身失败时回给模型的话，口径同进度工具 */
 const projectFailure = ($: Dollar, error: HookFailure): Promise<string> => toolFailure($, error, { tool: '项目工具', file: '全局项目配置' })
+
+/** /xiaoxiaoli branch 的改法 */
+const BRANCH_USAGE_TEXT = '改法：/xiaoxiaoli branch name <名字段> · branch template <需求模板> · branch bug <缺陷模板> · branch base <起点>；模板里 {id} 必须有、{name} 换成名字段；也可以对 AI 说「照我以前的分支起名」'
+/** branch 后面认的词与它改的字段：name 改档案里的名字段，其余改项目配置 */
+const BRANCH_SUBS: Record<string, 'branchName' | (typeof BRANCH_FIELDS)[number]> = { name: 'branchName', template: 'branchTemplate', bug: 'bugBranchTemplate', base: 'branchBase' }
+
+/** 现在的分支命名一行：项目配置里的模板与起点（没绑 TAPD 也读）、档案里的名字段与拼出来的示例 */
+const currentBranchText = async ($: Dollar): Promise<string> => {
+    await loadConfig($)
+    const place = await read($, workplace)
+    const settings = branchSettingsOf(place === null ? '' : await readText($, place.configPath))
+
+    return branchSummaryText(settings, (await loadProfile($)).branchName ?? '')
+}
+
+/**
+ * /xiaoxiaoli branch [name|template|bug|base <值>]：不经过 AI 看或改分支命名。不带参数（或只带子命令）时回现在生效的模板、起点、名字段
+ * 与拼出来的示例；name 写全局档案的 branchName（各项目通用），template、bug、base 写全局项目配置（校验同 project 工具），
+ * 项目内模式不往项目仓库写。
+ * @param $ 引擎接口
+ * @param value 命令参数去掉 branch 之后的部分
+ * @returns 命令输出文字
+ */
+const runBranchCommand = async ($: Dollar, value: string): Promise<string> => {
+    const sub = value.split(/\s+/, 1)[0] ?? ''
+    const rest = value.slice(sub.length).trim()
+    const field = Object.hasOwn(BRANCH_SUBS, sub) ? BRANCH_SUBS[sub] : undefined
+    if (value === '' || (field !== undefined && rest === '')) return say($, `${await currentBranchText($)}\n${BRANCH_USAGE_TEXT}`)
+    if (field === undefined) return say($, `没改，branch 后面只认 name、template、bug、base；${BRANCH_USAGE_TEXT}`)
+    if ((await readGlobalRoot($)) === '') return say($, `没改，${NO_GLOBAL_ROOT_TEXT}，分支设置存不了，没有写入`)
+
+    if (field === 'branchName') {
+        const checked = checkBranchName(rest)
+        if ('reason' in checked) return say($, `没改，${checked.reason}`)
+
+        const saved = await saveProfile($, { branchName: checked.name })
+        if ('reason' in saved) return say($, `没改，${saved.reason}，没有写入`)
+        return say($, `已记下名字段 ${checked.name}（写入 ${saved.path}，各项目通用）；${await currentBranchText($)}`)
+    }
+
+    const change = toProjectChange({ [field]: rest })
+    if (typeof change === 'string') return say($, `没改，${change}`)
+
+    await loadConfig($)
+    const place = await read($, workplace)
+    if (place === null) return say($, '没改，还没定下当前项目，稍后再试')
+    if (place.mode !== 'global') return say($, `没改，本项目用项目内配置 ${place.configPath}，分支设置写在那份文件里，本命令不往项目仓库写；要改请直接编辑它`)
+
+    try {
+        await $.fs.write(place.configPath, projectConfigText(await readText($, place.configPath), change))
+    } catch (cause) {
+        return say($, `没改，写 ${place.configPath} 失败（${describeError(cause)}），没有写入`)
+    }
+    return say($, `已改（写入 ${place.configPath}），从下一次开新会话起生效；${await currentBranchText($)}`)
+}
 
 /**
  * /xiaoxiaoli refresh 的回复：重读配置、状态文件与工作流并刷新待办。这次没拉到、进入自动重试时说正在重试；
@@ -2158,6 +2254,7 @@ const runCommand = async ($: Dollar, arg: string, isAsked: boolean): Promise<str
     const rest = arg.slice(sub.length).trim()
     if (sub === 'name') return runNameCommand($, rest)
     if (sub === 'role') return runRoleCommand($, rest)
+    if (sub === 'branch') return runBranchCommand($, rest)
     if (sub === 'setup') return rest === '' ? startSetup($, true) : say($, 'setup 不带参数；直接改名用 /xiaoxiaoli name <名字>')
     if (sub === 'tour') return rest === '' ? startTour($, true) : say($, 'tour 不带参数')
     if (arg === 'project') return say($, `本项目概况\n${await projectSummary($)}`)
@@ -2262,8 +2359,8 @@ export const register: Register = on => {
         await $.command.register({
             name: 'xiaoxiaoli',
             description:
-                'AI 工作台：show 打开工作面板，hide 收起，refresh 重读配置并刷新待办，unbind 解除本项目的全局 TAPD 绑定，setup 让 AI 引导给工作台起名，name <名字> 直接改名，role <工种> 设工种，project 看本项目的配置概况，tour 走一遍演练',
-            argumentHint: '[show|hide|refresh|unbind|setup|name <名字>|role <工种>|project|tour]'
+                'AI 工作台：show 打开工作面板，hide 收起，refresh 重读配置并刷新待办，unbind 解除本项目的全局 TAPD 绑定，setup 让 AI 引导给工作台起名，name <名字> 直接改名，role <工种> 设工种，project 看本项目的配置概况，tour 走一遍演练，branch 看或改分支命名（名字段、模板、起点）',
+            argumentHint: '[show|hide|refresh|unbind|setup|name <名字>|role <工种>|project|tour|branch [name|template|bug|base <值>]]'
         })
         const stored = await $.store.get('scope')
         const scope: TodoScope | undefined = stored === 'project' || stored === 'all' ? stored : undefined

@@ -211,12 +211,13 @@ export const worktreeOf = (root: string, id: string): string => {
 }
 
 /**
- * 按模板出分支名。
- * @param template 分支名模板，{id} 换成短 ID
+ * 按模板出分支名，只做替换、不校验（开工生成命令用 branch.ts 的 planBranch：缺名字段或拼出来不合格时不拼）。
+ * @param template 分支名模板，{id} 换成短 ID，{name} 换成名字段
  * @param id TAPD 短 ID
+ * @param name 名字段，不传为 ''
  * @returns 分支名
  */
-export const branchOf = (template: string, id: string): string => template.replace(/\{id\}/g, id)
+export const branchOf = (template: string, id: string, name = ''): string => template.replace(/\{id\}/g, id).replace(/\{name\}/g, name)
 
 /**
  * 主工作区下的 docs/xiaoli：项目内模式下新会话在 worktree 里看不到这个被忽略的目录，用 --add-dir 加进来。

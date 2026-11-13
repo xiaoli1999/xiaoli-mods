@@ -52,21 +52,43 @@ const GUIDED_KEYS = ['version', 'guided', 'guidedBy']
 const TOUR_KEYS = ['version', 'tour', 'tourAt', 'tourSummary']
 /** 演练小结最多存几个字符（按码点数） */
 export const TOUR_SUMMARY_LIMIT = 500
+/** 分支名里的名字段（模板的 {name}）最多几个字符 */
+export const BRANCH_NAME_LIMIT = 20
+/** 名字段只许字母、数字、. - _：要拼进分支名与启动命令，和分支名同一套白名单，但不许 / */
+const BRANCH_NAME_PATTERN = /^[A-Za-z0-9._-]+$/
 
 /** 校验名字的结果：合格为去掉首尾空白与后缀后的名字，不合格为原因 */
 export type NameCheckType = { name: string } | { reason: string }
 
 /**
- * 写档案要改的内容：起了名字（可一并设工种）、只设工种、选了先不设、记下「已自动发起过设置引导」
- * （guidedBy 为发起它的会话 ID，多个会话同时启动时写完重读、认出是不是自己记的），或记下演练处理过
- * （done 走过、declined 选了不用；tourAt 为时间，summary 为演练小结，只在 done 时可带）
+ * 写档案要改的内容：起了名字（可一并设工种、名字段）、只设工种（可一并设名字段）、只设名字段、选了先不设、
+ * 记下「已自动发起过设置引导」（guidedBy 为发起它的会话 ID，多个会话同时启动时写完重读、认出是不是自己记的），
+ * 或记下演练处理过（done 走过、declined 选了不用；tourAt 为时间，summary 为演练小结，只在 done 时可带）
  */
 export type ProfileChangeType =
-    | { name: string; role?: WorkRole }
-    | { role: WorkRole }
+    | { name: string; role?: WorkRole; branchName?: string }
+    | { role: WorkRole; branchName?: string }
+    | { branchName: string }
     | { isSkipped: true }
     | { guidedBy: string }
     | { tour: TourStateType; tourAt: string; summary?: string }
+
+/**
+ * 校验分支名里的名字段（模板的 {name}，一个人在各项目通用）：去掉首尾空白后 1 到 20 个字符，只许字母、数字、. - _。
+ * @param raw 原值
+ * @returns 合格的名字段，或不合格的原因
+ */
+export const checkBranchName = (raw: unknown): NameCheckType => {
+    if (typeof raw !== 'string') return { reason: 'branchName 要填名字段（文字）' }
+
+    const name = raw.trim()
+    const count = [...name].length
+    if (count === 0) return { reason: 'branchName 不能为空' }
+    if (count > BRANCH_NAME_LIMIT) return { reason: `branchName 最多 ${BRANCH_NAME_LIMIT} 个字符，现在是 ${count} 个` }
+    if (!BRANCH_NAME_PATTERN.test(name)) return { reason: 'branchName 只能含字母、数字与 . - _（不能有空格、/、中文等）' }
+
+    return { name }
+}
 
 /**
  * 认工种：id（不分大小写）或中文名（前端、后端、Python、测试、产品、其他），前后空白不算。
@@ -129,7 +151,7 @@ export const checkName = (raw: unknown): NameCheckType => {
  * 解析全局档案：不是合法 JSON、版本不对、字段类型不对或名字不合格，都当作还没设置，不报错；
  * 版本比本 mod 认识的新时 isNewer 为 true，名字照样当作没设置。名字合格时以名字为准，忽略 skipped。
  * guided 为 true 是「已自动发起过设置引导」的标记，只管以后不再自动发起，不影响是否还没设置。
- * tour 只认 done、declined，其余当作没处理过演练（不写这个字段）。
+ * tour 只认 done、declined，其余当作没处理过演练（不写这个字段）。branchName（分支名里的名字段）合格才认，不合格或没写不写这个字段。
  * @param text 文件内容，读不到为 ''
  * @returns 档案内容
  */
@@ -143,7 +165,9 @@ export const parseProfile = (text: string): ProfileType => {
     /* 工种只认文件里写的 id，认不出当作没设 */
     const role = WORK_ROLES.find(i => i === value.role) ?? ''
     const tour: { tour?: TourStateType } = value.tour === 'done' || value.tour === 'declined' ? { tour: value.tour } : {}
-    const read: ProfileType = { ...empty, isGuided: value.guided === true, role, ...tour }
+    const branchChecked = value.branchName === undefined ? undefined : checkBranchName(value.branchName)
+    const branchName: { branchName?: string } = branchChecked !== undefined && 'name' in branchChecked ? { branchName: branchChecked.name } : {}
+    const read: ProfileType = { ...empty, isGuided: value.guided === true, role, ...tour, ...branchName }
     const checked = checkName(value.name)
     if ('name' in checked) return { ...read, name: checked.name }
 
@@ -170,9 +194,9 @@ const toJsonText = (value: Record<string, unknown>): string => `${JSON.stringify
 /**
  * 写回档案的全文：版本写成 1；起名时写 name、去掉 skipped，先不设时写 skipped、去掉 name；
  * 记自动发起标记时写 guided: true 与 guidedBy，名字与 skipped 不动；记演练时写 tour 与 tourAt，带了小结写 tourSummary
- * （超过 500 个字符只存前 500 个），没带就去掉上次的；文件里别的字段原样保留。
+ * （超过 500 个字符只存前 500 个），没带就去掉上次的；带了名字段写 branchName（别的不动）；文件里别的字段原样保留。
  * @param oldText 原文件全文，没有为 ''
- * @param change 起的名字、先不设、自动发起的标记，或演练结果
+ * @param change 起的名字、工种、名字段、先不设、自动发起的标记，或演练结果
  * @returns 新全文，末尾换行
  */
 export const profileText = (oldText: string, change: ProfileChangeType): string => {
@@ -183,11 +207,16 @@ export const profileText = (oldText: string, change: ProfileChangeType): string 
         return toJsonText({ version: PROFILE_VERSION, ...omitKeys(record, TOUR_KEYS), tour: change.tour, tourAt: change.tourAt, ...summary })
     }
     if ('isSkipped' in change) return toJsonText({ version: PROFILE_VERSION, skipped: true, ...omitKeys(record, OWN_KEYS) })
+
+    /* 名字段：只改 branchName，跟着名字或工种一起给时在它们写好的基础上再改 */
+    const withBranchName = (text: string): string =>
+        change.branchName === undefined ? text : toJsonText({ ...omitKeys(parseRecord(text) ?? {}, ['branchName']), branchName: change.branchName })
+    if (!('name' in change) && !('role' in change)) return withBranchName(toJsonText({ version: PROFILE_VERSION, ...omitKeys(record, ['version']) }))
     /* 只设工种：名字与先不设都不动 */
-    if (!('name' in change)) return toJsonText({ version: PROFILE_VERSION, ...omitKeys(record, ['version', 'role']), role: change.role })
+    if (!('name' in change)) return withBranchName(toJsonText({ version: PROFILE_VERSION, ...omitKeys(record, ['version', 'role']), role: change.role }))
 
     const role = change.role === undefined ? {} : { role: change.role }
-    return toJsonText({ version: PROFILE_VERSION, name: change.name, ...omitKeys(record, change.role === undefined ? OWN_KEYS : [...OWN_KEYS, 'role']), ...role })
+    return withBranchName(toJsonText({ version: PROFILE_VERSION, name: change.name, ...omitKeys(record, change.role === undefined ? OWN_KEYS : [...OWN_KEYS, 'role']), ...role }))
 }
 
 /**

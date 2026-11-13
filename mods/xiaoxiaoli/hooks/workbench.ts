@@ -137,12 +137,13 @@ export const samePath = (a: string, b: string): boolean => normalizePath(a) === 
 export const isRefName = (text: string): boolean => REF_PATTERN.test(text)
 
 /**
- * 是否可作分支名模板：要含 {id}，换掉后只剩分支名允许的字符。
+ * 是否可作分支名模板：要含 {id}，可以有 {name}（名字段），换掉这两个占位符后只剩分支名允许的字符。
+ * 没有 {name} 的旧模板判定与以前完全相同。
  * @param raw 模板原值
  * @returns 是否合格
  */
 export const isBranchTemplate = (raw: unknown): raw is string =>
-    typeof raw === 'string' && raw.includes('{id}') && REF_PATTERN.test(raw.replace(/\{id\}/g, '0'))
+    typeof raw === 'string' && raw.includes('{id}') && REF_PATTERN.test(raw.replace(/\{id\}/g, '0').replace(/\{name\}/g, 'a'))
 
 /** 分支名模板：不合格用默认 */
 const toTemplate = (raw: unknown, fallback: string): string => (isBranchTemplate(raw) ? raw : fallback)

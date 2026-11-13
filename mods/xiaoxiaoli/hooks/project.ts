@@ -1,10 +1,14 @@
 /**
- * @description 项目差异与通用资料：全局项目配置里的 displayName（面板上显示的名字）与 systems（本项目用不用某个系统）的读取、校验、合并写回，
+ * @description 项目差异与通用资料：全局项目配置里的 displayName（面板上显示的名字）、systems（本项目用不用某个系统）
+ * 与分支设置（branchTemplate、bugBranchTemplate、branchBase）的读取、校验、合并写回，
  * 通用资料目录 shared/ 的约定与说明文字，以及 project 工具 get 的概况文字（含发版配置、体检与演练那两行）；纯函数便于测试
  * @author xiao li
  * @createDate 2026-11-12 20:00
  */
 import type { TourStateType } from '../types'
+import { isRefName } from './workbench'
+import { branchSummaryText, branchTemplateProblem } from './branch'
+import type { BranchSettingsType } from './branch'
 
 /** 通用资料目录：全局根目录下，放各项目通用的 resources.md、secrets.env，由 AI 用到时创建和维护，mod 不读内容 */
 export const SHARED_DIR = 'shared'
@@ -47,11 +51,20 @@ export interface ProjectExtrasType {
     systems: Record<string, boolean>
 }
 
-/** project 工具 set 的参数：displayName 传 '' 为清掉；systems 与已有的合并，值 null 为去掉该键 */
+/**
+ * project 工具 set 的参数：displayName 传 '' 为清掉；systems 与已有的合并，值 null 为去掉该键；
+ * branchTemplate、bugBranchTemplate、branchBase 为开新会话的分支设置，传 '' 为清掉（回到默认）
+ */
 export interface ProjectChangeType {
     displayName?: string
     systems?: Record<string, boolean | null>
+    branchTemplate?: string
+    bugBranchTemplate?: string
+    branchBase?: string
 }
+
+/** project 工具 set 能改的分支设置字段 */
+export const BRANCH_FIELDS = ['branchTemplate', 'bugBranchTemplate', 'branchBase'] as const
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -109,15 +122,29 @@ export const parseProjectExtras = (text: string): ProjectExtrasType => {
 }
 
 /**
- * 校验 project 工具 set 的参数：displayName 与 systems 至少给一个；displayName 为 '' 是清掉，否则按 checkDisplayName；
- * systems 要是对象，键按 isSystemKey，值只能是 true、false 或 null（去掉该键）。
+ * 校验 project 工具 set 的参数：displayName、systems 与三个分支设置至少给一个；displayName 为 '' 是清掉，否则按 checkDisplayName；
+ * systems 要是对象，键按 isSystemKey，值只能是 true、false 或 null（去掉该键）；分支模板按 bind 的规则校验
+ * （占位符 {id} 必须有、{name} 为名字段，再用示例值拼一次做分支名自检），起点只许字母、数字与 . _ / -；三者传 '' 为清掉、回到默认。
  * @param raw 工具参数
  * @returns 参数；不合格返回原因
  */
 export const toProjectChange = (raw: Record<string, unknown>): ProjectChangeType | string => {
-    if (raw.displayName === undefined && raw.systems === undefined) return 'displayName 与 systems 至少给一个'
+    if (raw.displayName === undefined && raw.systems === undefined && BRANCH_FIELDS.every(i => raw[i] === undefined)) {
+        return 'displayName、systems、branchTemplate、bugBranchTemplate、branchBase 至少给一个'
+    }
 
     const change: ProjectChangeType = {}
+    for (const field of BRANCH_FIELDS) {
+        const value = raw[field]
+        if (value === undefined) continue
+        if (value === '') {
+            change[field] = ''
+            continue
+        }
+        const problem = field === 'branchBase' ? (typeof value === 'string' && isRefName(value) ? '' : 'branchBase 只能含字母、数字与 . _ / -') : branchTemplateProblem(value, field)
+        if (problem !== '') return problem
+        change[field] = value as string
+    }
     if (raw.displayName !== undefined) {
         if (raw.displayName === '') {
             change.displayName = ''
@@ -163,6 +190,12 @@ export const projectConfigText = (oldText: string, change: ProjectChangeType): s
         }
         if (Object.keys(merged).length) next.systems = merged
         else delete next.systems
+    }
+    for (const field of BRANCH_FIELDS) {
+        const value = change[field]
+        if (value === undefined) continue
+        if (value === '') delete next[field]
+        else next[field] = value
     }
 
     return `${JSON.stringify(next, null, 2)}\n`
@@ -212,6 +245,8 @@ export interface ProjectSummaryType {
     role: { title: string; isDefault: boolean }
     /** 发版配置 release.json 在两处资料目录里在不在：不传不写这一行 */
     release?: ReleaseSummaryType
+    /** 分支命名：项目配置里的模板与起点、档案里的名字段（没记为 ''）；不传不写这一行 */
+    branch?: { settings: BranchSettingsType; name: string }
     /** 体检与演练：不传不写这一行 */
     guide?: GuideSummaryType
 }
@@ -273,7 +308,8 @@ const resourceText = (dir: ResourceDirType): string =>
 
 /**
  * project 工具 get 与 /xiaoxiaoli project 的概况：显示名与目录名、TAPD 绑定、用到的系统、两处资料目录与资料文件在不在（不读内容）、
- * 给了发版配置时再加一行（见 releaseSummaryText）、生效工作流、工作台名字与工种，给了体检与演练时末尾再加一行（见 guideSummaryText）。
+ * 给了发版配置、分支命名时各加一行（见 releaseSummaryText、branchSummaryText）、生效工作流、工作台名字与工种，
+ * 给了体检与演练时末尾再加一行（见 guideSummaryText）。
  * 项目内模式说明显示名与 systems 不支持。
  * @param summary 概况所需的一切
  * @returns 多行文字
@@ -293,6 +329,7 @@ export const projectSummaryText = (summary: ProjectSummaryType): string => {
         `通用资料目录：${summary.shared === null ? '取不到用户目录，没有' : resourceText(summary.shared)}`,
         `项目资料目录：${summary.data === null ? '项目内模式没有（流程与资料按项目内文档）' : resourceText(summary.data)}；两处都有的以项目的为准`,
         ...(summary.release === undefined ? [] : [releaseSummaryText(summary.release)]),
+        ...(summary.branch === undefined ? [] : [branchSummaryText(summary.branch.settings, summary.branch.name)]),
         `工作流：${summary.workflowLabel}`,
         `工作台：${summary.fullName}；工种：${summary.role.title}${summary.role.isDefault ? '（没设，按前端）' : ''}`,
         ...(summary.guide === undefined ? [] : [guideSummaryText(summary.guide)])
