@@ -12,6 +12,8 @@
 
 个人通用的东西配一次、所有项目共用，项目只记和通用不一样的差异（显示名、用到哪些系统等），都放在全局目录、只有有差异的项目才有自己的文件，见「通用配置与项目差异」。
 
+发版这一步有随插件发的发版工具（Jenkins）：AI 先检查、把将要触发的内容给你看，你同意后才触发并等到结束；生产这类受保护的环境永远只打印、由你自己点；发到测试环境验收通过后按 TAPD 流程提测。配置不含密钥，账号令牌由你自己填进 `secrets.env`，见「发版工具」。
+
 刚装好可以让 AI 带你走一遍演练：先检查本机已经装了哪些 MCP、skill 和命令行工具，缺的当场补或记下以后补，再按你的工作流模拟走一遍每个环节、讲讲功能点，卡在哪里就告诉你要准备什么；不建分支、不改 TAPD，见「体检与演练」。
 
 开发流程 skill `xiaoli-workflow` 随工作面板一起装（会话里叫 `xiaoxiaoli:xiaoli-workflow`）；每天第一次开会话时自动检查新版，插件市场安装的自动更新，见「自动更新」。
@@ -50,6 +52,7 @@ mods/xiaoxiaoli/
 │  └─ icon.png             插件图标
 ├─ hooks/                  代码：register.tsx 是入口，其余是各部分的纯函数（update.ts 管自动更新，与陪伴猫里的同名文件是同一份）
 ├─ skills/xiaoli-workflow/ 随插件装的开发流程 skill（SKILL.md）
+├─ tools/                  随插件发的命令行工具：发版工具 jenkins.mjs 与它的测试 jenkins.test.mjs（会话里的 AI 运行，mod 不运行）
 ├─ workflows/              六个工种的内置工作流
 ├─ guide/                  体检依赖清单 deps.json 与演练脚本 tour.json
 ├─ types/                  $.state 的类型
@@ -102,14 +105,16 @@ TAPD 走会话里已连接的 MCP 服务器，代码里写死服务器名 `tapd`
 ├─ workflow.json         个人通用：个人自定义工作流（可选，有自定义才有）
 ├─ shared/               个人通用：通用资料目录
 │  ├─ resources.md       各项目通用的地址、命令、发版方式等（AI 用到时创建和维护）
-│  ├─ secrets.env        各项目通用的测试账号等（AI 用到时创建和维护）
+│  ├─ secrets.env        各项目通用的测试账号、Jenkins 账号与令牌等（AI 建文件，密钥由你自己填）
+│  ├─ release.json       各项目共用的发版配置（可选，少见；发版工具读，见「发版工具」）
 │  └─ README.md          说明这个目录的用途（第一次生成新会话命令时 mod 写）
 └─ projects/<项目键>/    按项目：只有有差异的项目才有
    ├─ config.json        TAPD 绑定、分支设置、displayName、systems
    ├─ state.json         进行中的条目（工作面板开工或进度工具写）
    ├─ workflow.json      项目自定义工作流（可选）
    ├─ resources.md       本项目和通用不一样的资料（可选，AI 维护）
-   └─ secrets.env        本项目和通用不一样的账号（可选，AI 维护）
+   ├─ secrets.env        本项目和通用不一样的账号（可选，AI 维护）
+   └─ release.json       本项目的发版配置（可选，用 Jenkins 发版时 AI 带你配，见「发版工具」）
 ```
 
 ### 查找与覆盖
@@ -135,10 +140,11 @@ TAPD 走会话里已连接的 MCP 服务器，代码里写死服务器名 `tapd`
 ### 怎么对 AI 说
 
 - 「这个项目显示成某某」「这个项目不用 TAPD」「这个项目用语雀、不用 figma」：AI 调 `mcp__xiaoxiaoli__project` 的 set。
-- 「看看这个项目的配置」：AI 调 get，一次看全显示名与目录名、TAPD 绑定、用到的系统、两处资料目录与 `resources.md`、`secrets.env` 在不在、生效的工作流、工作台名字与工种。自己看不经过 AI：`/xiaoxiaoli project`。
+- 「看看这个项目的配置」：AI 调 get，一次看全显示名与目录名、TAPD 绑定、用到的系统、两处资料目录与 `resources.md`、`secrets.env` 在不在、两处发版配置 `release.json` 在不在、生效的工作流、工作台名字与工种。自己看不经过 AI：`/xiaoxiaoli project`。
 - 「把测试账号记下来，各项目通用」：AI 写进通用资料目录的 `secrets.env`；只这个项目不一样的写进项目资料目录。
+- 「这个项目用 Jenkins 发版，帮我配一下」：AI 带你写项目资料目录的 `release.json`，告诉你往 `secrets.env` 填哪几个键，见「发版工具」。
 
-mod 不读 `resources.md` 与 `secrets.env` 的内容，只看在不在；读写它们的是会话里的 AI。
+mod 不读 `resources.md`、`secrets.env`、`release.json` 的内容，只看在不在；读写它们的是会话里的 AI，`secrets.env` 与 `release.json` 另由 AI 运行的发版工具读取（见「发版工具」）。
 
 ### 测试账号可以有多组
 
@@ -292,6 +298,8 @@ mod 不读 `resources.md` 与 `secrets.env` 的内容，只看在不在；读写
 | 步骤 `what`、`tools`、`output`、`ask` | 可选，给 AI 看的细则：做什么、用什么、产出、要不要先问；每项最多 200 个字符，工作面板不显示 |
 | 步骤 `rules` | 可选，给 AI 看的细则条目，最多 10 条，每条最多 300 个字符 |
 
+细则里可以写占位符 `{tools}`：工作流工具 get 返回给 AI 时换成插件目录下 `tools` 的绝对路径（正斜杠，如 `C:/Users/<用户>/.claude/plugins/cache/xiaoli-mods/xiaoxiaoli/0.10.0/tools`），内置与自定义的工作流都换；只换返回的文字，存盘的定义里仍是 `{tools}`，插件更新换了目录也不用改。前端、后端、Python 的发版环节用它写发版工具的路径（`node "{tools}/jenkins.mjs" …`）。
+
 工作面板开工时需求从拉取 TAPD、排序之后的第一步开始（前端为建分支，测试为读需求），缺陷从第一步开始。
 
 ## 体检与演练
@@ -314,7 +322,7 @@ mod 不读 `resources.md` 与 `secrets.env` 的内容，只看在不在；读写
 3. 功能点：沉浸、待办区、进行中区、对 AI 说话改配置、命令。
 4. 收尾：给一份只写实际验证过的小结，调 finish 移除演示条目、在档案里记下演练走过。
 
-不做：不建分支、不提交、不推送；不改 TAPD（不发评论、不改状态、不新建条目）；不上传语雀；不发版；不做会落库的写操作。只做只读验证，和把你当场给的配置记进资料目录（通用的进通用资料目录，只属于本项目的进项目资料目录，账号只进 `secrets.env`、按「测试账号可以有多组」的约定写）。这些规则写在演练脚本里，由 AI 遵守。
+不做：不建分支、不提交、不推送；不改 TAPD（不发评论、不改状态、不新建条目）；不上传语雀；不发版、不触发构建；不做会落库的写操作。只做只读验证，和把你当场给的配置记进资料目录（通用的进通用资料目录，只属于本项目的进项目资料目录，账号只进 `secrets.env`、按「测试账号可以有多组」的约定写）。发版那一环：用 Jenkins 的带你配好 `release.json`，请你自己填密钥，再运行一次发版工具的只读 `check`（连 Jenkins 只发 GET）；不用 Jenkins 的记下发版方式。演练脚本里的 `{tools}` 同样换成发版工具所在目录的绝对路径。这些规则写在演练脚本里，由 AI 遵守。
 
 演练要多轮对话，会花不少 token（体检、每个环节、功能点都要来回）。中途说停或以后再说，AI 立刻停下并调 finish 收尾（也记成走过，工作面板不再出引导），以后输入 `/xiaoxiaoli tour` 可以再来。
 
@@ -363,6 +371,146 @@ start 返回的脚本按顺序：开头几行（演示条目与进度怎么报�
 
 装了新的 MCP 要重开会话才生效，体检里先记 `missing`；重开会话后再走一遍，工作面板上的缺项才会更新。
 
+## 发版工具
+
+工作流的「发版」环节（Python 工种叫「上线」）要触发 Jenkins 构建时用它。它是随工作面板插件一起发的一个 Node 脚本 `tools/jenkins.mjs`：纯 Node（会话里本来就要有 Node），不依赖第三方包，Windows、macOS、Linux 都能跑，不用另外装命令行工具。它由会话里的 AI 在命令行运行；mod 本身不运行它，只在工作流工具 get 与演练脚本里把 `{tools}` 换成它所在目录的绝对路径，在概况里看两处 `release.json` 在不在。不用 Jenkins 的项目不需要它，AI 按资料里记的发版方式走。
+
+### 放在哪、AI 怎么找到
+
+- 脚本：插件目录下的 `tools/jenkins.mjs`。插件市场安装的在 `~/.claude/plugins/cache/xiaoli-mods/xiaoxiaoli/<版本>/tools/`，本地目录加载的就是仓库里的 `mods/xiaoxiaoli/tools/`。插件市场安装时整个插件目录都会复制进缓存，`tools/` 不用在 `plugin.json` 里声明。版本一更新路径就变，所以工作流里写的是占位符 `{tools}`，AI 每次取工作流拿到的都是当前的绝对路径。
+- 发版配置 `release.json`（不含密钥）：放项目资料目录（全局模式下是 `~/.claude/xiaoxiaoli/projects/<项目键>/`）；各项目共用的也可以放通用资料目录 `~/.claude/xiaoxiaoli/shared/`，两处都有时用项目的。工具自己的查找顺序是 `--config <路径>` → 环境变量 `XIAOLI_RELEASE_CONFIG` → 当前目录的 `release.json`；工作流里让 AI 总是显式带 `--config`。
+- 密钥：两处资料目录各自的 `secrets.env`。工具用 `--secrets <路径>` 读，可以给多个，后面的覆盖前面的（工作流里先通用、再项目，即「通用的一份加项目自己的一份」）；读不到的文件跳过；没给 `--secrets` 时读环境变量 `XIAOLI_RELEASE_SECRETS`（多个路径用系统的路径分隔符隔开：Windows 是 `;`，macOS、Linux 是 `:`）。
+
+AI 调用时在项目目录下运行（`compare` 要在项目的 git 仓库里数提交），两处资料目录的路径从开工消息里拿：
+
+```
+node "<插件目录>/tools/jenkins.mjs" check --config "<项目资料目录>/release.json" --secrets "<通用资料目录>/secrets.env" --secrets "<项目资料目录>/secrets.env"
+```
+
+### 发版配置 release.json
+
+下面是一份虚构的完整示例：dev 与 beta 在同一个 Jenkins 上（同一个密钥前缀），dev 带回滚与「和远程分支比」，生产受保护。
+
+```json
+{
+  "version": 1,
+  "defaultEnv": "dev",
+  "environments": {
+    "dev": {
+      "title": "开发环境",
+      "secretPrefix": "JENKINS_DEV",
+      "job": "my-app-dev",
+      "params": {
+        "DEPLOY_TYPE": { "choices": ["BUILD", "ROLLBACK", "LIST"], "default": "BUILD", "description": "构建、回滚或列出可回滚的版本" }
+      },
+      "verifyUrls": ["https://dev.example.com/healthz"],
+      "compare": { "remote": "origin", "branch": "dev", "ignore": { "DEPLOY_TYPE": ["LIST"] } },
+      "rollback": { "param": "DEPLOY_TYPE", "value": "ROLLBACK", "targetParam": "ROLLBACK_RELEASE", "targetPattern": "^(release-[\\w.-]+|previous)$" }
+    },
+    "beta": {
+      "title": "测试环境",
+      "secretPrefix": "JENKINS_DEV",
+      "job": "my-app/beta",
+      "params": { "TARGET": "beta", "BRANCH": { "default": "dev", "pattern": "^[\\w./-]+$" } },
+      "verifyUrls": ["https://beta.example.com/"]
+    },
+    "prod": {
+      "title": "生产环境",
+      "secretPrefix": "JENKINS_PROD",
+      "job": "my-app-prod",
+      "params": { "DEPLOY_TYPE": { "choices": ["BUILD"] } },
+      "protected": true,
+      "verifyUrls": ["https://www.example.com/"]
+    }
+  }
+}
+```
+
+顶层：
+
+| 字段 | 说明 |
+| --- | --- |
+| `version` | 可选，缺省 1；比 1 新的不认，提示先更新工作面板插件 |
+| `defaultEnv` | 可选：不带 `--env` 时用哪个环境；不写时只有一个环境就用它，有多个要带 `--env` |
+| `environments` | 必填：环境名到环境的映射，至少一个。环境名字母开头，只含字母、数字、`_`、`-`，最多 32 个字符 |
+| `description`、`$schema` | 可选，备注，工具不读 |
+
+每个环境：
+
+| 字段 | 说明 |
+| --- | --- |
+| `secretPrefix` | 必填：这个环境的 Jenkins 地址与账号从密钥的哪组键取（见下一节）；大写字母开头，只含大写字母、数字与下划线。几个环境在同一个 Jenkins 上就写同一个前缀 |
+| `job` | 必填：job 名，文件夹用 `/` 隔开（如 `my-app/beta`）；只许字母、数字、`.`、`-`、`_`，不许只由点组成的段 |
+| `params` | 可选：触发时带的参数，参数名到取值。写文字是固定值（`--param` 改不了）；写对象是可选参数：`default` 默认值（不写时有 `choices` 取第一个，同 Jenkins 的选项参数，否则为空）、`choices` 可选值、`pattern` 值要符合的正则、`description` 说明。参数名字母或下划线开头，只含字母、数字、下划线；参数值只许字母、数字与 `_ . - / : @ + ,`，最长 200 个字符 |
+| `protected` | 可选，缺省 `false`；`true` 为受保护的环境：`build` 永远只打印、不触发 |
+| `verifyUrls` | 可选：发版后验收要看的地址（http、https，不能带账号口令）。工具不去访问，只在 `wait` 成功后与 `check` 里列出来，供 AI 验收 |
+| `compare` | 可选，写了才启用：`status` 与 `build` 里和远程分支比线上落后几个提交。`remote` 缺省 `origin`；`branch` 必填；`ignore` 是不改变线上内容的构建（按参数取值跳过，如 `{ "DEPLOY_TYPE": ["LIST"] }`）。线上那次构建取最近一次成功、不在 `ignore` 里的，检出提交取自 Jenkins 的 API，取不到时从控制台的 `Checking out Revision` 行补；最近生效的是回滚时不比；本地缺提交时提示先 fetch |
+| `rollback` | 可选，写了才能 `build --rollback`：`param` 设成 `value` 就是回滚（`param` 要在 `params` 里声明、不能是固定值，有 `choices` 时 `value` 要在其中）；`targetParam` 可选，带回滚目标，只在回滚时带，不要再写进 `params`；`targetPattern` 可选，回滚目标要符合的正则（目标为空总是允许，由 job 自己决定回到哪一版） |
+| `title`、`description` | 可选：给人看的名字（40 个字符以内）与备注 |
+
+不认识的字段一律报错（比如把 `protected` 写成 `protect`），免得受保护悄悄失效。
+
+### 密钥键名
+
+前缀来自 `secretPrefix`：
+
+| 键 | 说明 |
+| --- | --- |
+| `<前缀>_URL` | Jenkins 地址；填登录页地址也行，工具去掉 `/login`、查询串与地址里的账号口令，只认 http、https |
+| `<前缀>_ACCOUNT` | 账号 |
+| `<前缀>_API_TOKEN` | API 令牌（推荐，在 Jenkins 的用户设置里生成） |
+| `<前缀>_PASSWORD` | 没有令牌时退回用口令，工具每次都提醒改用令牌 |
+| `<前缀>_API_ACCOUNT` | 可选：令牌对应的账号和登录账号不同时写，有令牌时优先用它 |
+
+`secrets.env` 里按「测试账号可以有多组」的约定写一组，例如：
+
+```
+# [Jenkins-开发] dev 与 beta 共用，发版工具用
+JENKINS_DEV_URL=https://jenkins.example.com
+JENKINS_DEV_ACCOUNT=<账号>
+JENKINS_DEV_API_TOKEN=<令牌>
+```
+
+账号令牌由你自己填，不要贴进对话。工具读到的密钥绝不输出：所有输出与报错（含 `--json` 与 Jenkins 返回的报错原文、git 的报错）先把读到的值逐字换成 `***`（含 Basic 认证串与地址编码后的写法），再按令牌样式抹一遍（`Bearer` / `Basic` 认证串、带账号口令的地址、常见的令牌前缀、`password=…` 之类）；`secrets.env` 里键名像密钥的（含 `PASSWORD`、`TOKEN`、`SECRET`，或以 `KEY` 结尾）别的值也一并抹掉。缺键时只报键名，不报值。
+
+### 五个子命令
+
+| 子命令 | 做什么 |
+| --- | --- |
+| `check` | 只读：发版配置合不合格、密钥文件读没读到、每个环境的键在不在（只说有没有，不显示值）、能不能登录 Jenkins（`whoAmI`）、job 在不在、配置里声明的参数 job 上有没有、可选值对不对得上、远程分支取不取得到；受保护的环境没配密钥算跳过。`--env` 只查一个环境，`--offline` 只看文件与键、不连 Jenkins 和 git 远程 |
+| `status` | 最近 5 次构建（编号、开始时间、参数、结果、耗时、触发人、检出提交）、队列、下一个构建号；配了 `compare` 时比线上落后几个提交 |
+| `console <构建号\|last>` | 控制台最后 N 行（`--tail`，默认 60），已抹掉疑似令牌 |
+| `wait <构建号\|last>` | 轮询到构建结束（`--interval` 秒，默认 15；`--max-wait` 分钟，默认 20，最多 120）；成功时列出验收地址 |
+| `build` | 先打印「将触发 <job> <参数>」、远程分支、预计构建号与 job 忙不忙；带 `--yes` 才提交（不带参数的 job 用 `build`，带参数的用 `buildWithParameters`，先取 CSRF crumb）。`--param 名=值` 改可选参数（只许 `params` 里声明过、不是固定值的），`--rollback` 回滚（可带 `--target <目标>`） |
+
+公共选项：`--config`、`--secrets`（可重复）、`--env`、`--json`（给程序看）、`-h` / `--help`。给人看的文字都是中文。
+
+### 默认不触发、受保护的环境
+
+- `build` 不带 `--yes` 只打印；工作流规定 AI 先把这段原样给你看，你同意后它才带 `--yes` 再跑一次，接着 `wait` 到结束。
+- `protected: true` 的环境：`build` 永远只打印，带 `--yes` 也不提交、不取 crumb，退出码 5；没配这个环境的密钥时也能打印将触发的内容（注明没核对 Jenkins），所以生产可以干脆不配密钥。
+- job 只认配置里的：没有改 job 的选项；参数只许改配置里声明过、不是固定值的；参数值、job 名、远程名与分支名都按白名单校验，空格、引号、分号、`$`、反引号、尖括号、换行一律拒绝。
+- 每个请求 30 秒超时、不跟随跳转；`wait` 最多等 `--max-wait` 分钟。
+
+### 退出码
+
+| 退出码 | 意思 |
+| --- | --- |
+| 0 | 正常（含 `build` 只打印） |
+| 1 | 请求、参数或配置错误 |
+| 2 | `wait` 等待超时 |
+| 3 | 构建结果不是成功 |
+| 4 | `check` 有没通过的项 |
+| 5 | 受保护的环境拒绝触发（`build --yes`） |
+
+### 怎么对 AI 说
+
+- 「这个项目用 Jenkins 发版，帮我配一下」：AI 问清 Jenkins 地址用哪个密钥前缀、各环境的 job 与参数（可选值、默认值）、哪些环境受保护，写好项目资料目录的 `release.json`，告诉你往 `secrets.env` 填哪几个键；你填好后它跑一次 `check` 确认连得上。
+- 「发到 dev」「回滚 dev 到上一版」：AI 先做发版前检查，把将要触发的内容给你看，你点头后才触发并等到结束，再验收；发到测试环境验收通过后问你要不要提测（流转待测试、在条目上评论 @ 测试负责人）。
+- 「生产也配上，但只让我自己发」：AI 给生产写 `protected: true`。
+- 「这次我自己发」：AI 跳过触发与等待，检查、验收与提测照做。
+- 演练（`/xiaoxiaoli tour`）走到发版那一环也会带你配一遍，只跑只读的 `check`。
+
 ## 命令与开关
 
 | 方式 | 作用 |
@@ -373,7 +521,7 @@ start 返回的脚本按顺序：开头几行（演示条目与进度怎么报�
 | `/xiaoxiaoli setup` | 让 AI 引导给工作台起名（没绑定 TAPD 的项目顺带问绑定），同工作面板「[ 开始设置 ]」；起过名的可以重新设置。见「起名与首次引导」 |
 | `/xiaoxiaoli name [名字]` | 不经过 AI，直接校验并保存名字；不带名字时回当前名字与用法 |
 | `/xiaoxiaoli role [工种]` | 不经过 AI，直接改工种（前端、后端、Python、测试、产品、其他，中文名或 id 都认）；不带参数时回当前工种、可选项与本项目生效的工作流。见「工种与工作流」 |
-| `/xiaoxiaoli project` | 不经过 AI，打印本项目概况（同项目工具的 get）：显示名与目录名、TAPD 绑定、用到的系统、两处资料目录与资料文件在不在、生效的工作流、工作台名字与工种、上次体检与演练。见「通用配置与项目差异」 |
+| `/xiaoxiaoli project` | 不经过 AI，打印本项目概况（同项目工具的 get）：显示名与目录名、TAPD 绑定、用到的系统、两处资料目录与资料文件在不在、两处发版配置 `release.json` 在不在、生效的工作流、工作台名字与工种、上次体检与演练。见「通用配置与项目差异」 |
 | `/xiaoxiaoli tour` | 让 AI 带你走一遍演练：体检本机环境、按工作流模拟走一遍、讲功能点，同工作面板「[ 走一遍演练 ]」；走过、选过不用的也能再走。见「体检与演练」 |
 | 工作面板里「[ 开始设置 ]」「[ 先不设 ]」 | 还没起名时排在工作面板最上方，各占一行、整行可点；沉浸时不显示 |
 | 工作面板里「[ 走一遍演练 ]」「[ 不用了 ]」 | 起了名（或先不设）、演练还没处理过时排在同一位置，各占一行、整行可点；和起名引导不同时出，沉浸时、演练进行中不显示 |
@@ -491,7 +639,7 @@ cd '<项目目录>' && claude --session-id <新 UUID> -n '<短ID>' '开工 <长 
 
 项目内有 `config.json` 但必填字段不合格时，待办区只显示「本项目没配 TAPD（缺 config.json 或不完整），见 README」，不调 TAPD；项目内没有 `config.json`、又取不到全局根目录落不了全局时（见「配置与状态文件放在哪」第 3 条），待办区改为说明取不到用户目录、可设 `XIAOXIAOLI_HOME`，同样不调 TAPD；项目内没有 `config.json` 的走全局模式，必填字段缺了就是没绑定，显示绑定列表，只有进度文件的老项目也是这样（只有 `displayName`、`systems` 的全局配置同样算没绑定，不报不完整；`systems.tapd` 为 `false` 时不显示绑定列表）。进行中区照常。
 
-全局项目目录里还可以放项目专属的资料（如测试账号 `secrets.env`、`resources.md`），各项目通用的放通用资料目录 `<全局根>/shared`；给 AI 按流程读，mod 本身不读这些文件的内容。
+全局项目目录里还可以放项目专属的资料（如测试账号 `secrets.env`、`resources.md`、发版配置 `release.json`），各项目通用的放通用资料目录 `<全局根>/shared`；给 AI 按流程读（`secrets.env`、`release.json` 另由 AI 运行的发版工具读），mod 本身不读这些文件的内容。
 
 ## 状态文件 state.json（version 2，每 2 秒读一次）
 
@@ -573,7 +721,7 @@ cd '<项目目录>' && claude --session-id <新 UUID> -n '<短ID>' '开工 <长 
 
 始终放在提示词的工具列表里（全局模式每次开工都要先 get）。
 
-- `action: "get"`：返回当前项目生效的工作流：一行来源说明（项目自定义、个人自定义，或内置的哪个工种，以及文件位置、建不建分支、进行中的条目不受影响），自定义不合格时多几行「注意」，最后是定义的 JSON。可选 `kind: "story" | "bug"` 只返回那一组，省 token。
+- `action: "get"`：返回当前项目生效的工作流：一行来源说明（项目自定义、个人自定义，或内置的哪个工种，以及文件位置、建不建分支、进行中的条目不受影响），自定义不合格时多几行「注意」，最后是定义的 JSON。可选 `kind: "story" | "bug"` 只返回那一组，省 token。细则里的 `{tools}` 换成插件目录（`$.plugin.root`）下 `tools` 的绝对路径再返回，存盘的定义不换（见「定义文件的字段」）。
 - `action: "set"`：必填 `scope`（`project` 本项目、`personal` 个人）与完整的 `definition`（`story`、`bug`，可选 `branch`、`title`；对象或它的 JSON 文字）。校验通过才写到对应的 `workflow.json`（规范后的定义，版本写 1，多余字段丢掉），回话写明写到了哪、从下一条新开工的条目起生效、进行中的条目不受影响、本项目现在生效的是哪份。
 - `action: "reset"`：必填 `scope`，清空那一层（空文件等于没有自定义），回到下一层；本来就没有时如实说。
 - 只有用户明确要求调整工作流时 AI 才调 set 或 reset，改之前先 get、在其基础上改、保留没让改的步骤与细则（写在工具说明里）。
@@ -583,7 +731,7 @@ cd '<项目目录>' && claude --session-id <新 UUID> -n '<短ID>' '开工 <长 
 
 放在 ToolSearch 后面，不常驻（省 token）。用户说「这个项目显示成某某」「这个项目不用 TAPD / 用语雀」之类，或 AI 需要了解本项目配置概况时调。
 
-- `action: "get"`：本项目概况，内容同 `/xiaoxiaoli project`；`resources.md`、`secrets.env` 只看在不在，不读内容。
+- `action: "get"`：本项目概况，内容同 `/xiaoxiaoli project`；`resources.md`、`secrets.env`、`release.json` 只看在不在，不读内容。发版配置那一行：「发版配置（release.json）：通用资料目录有 / 没有 / 取不到，项目资料目录有 / 没有；发版工具优先用项目资料目录的」，两处都没有时提示在项目资料目录配一份，项目内模式写「发版按项目内文档」。
 - `action: "set"`：`displayName` 改显示名（传空字符串清掉，回到目录名），`systems` 与已有的合并（值 `null` 去掉该键）；至少给一个。写全局项目配置，文件里别的字段原样保留；写完马上重读，`tapd` 改成不用时工作面板不再拉待办，改回来恢复，回话写明改后的显示名与用到的系统。
 - 参数不合格、取不到全局根目录、项目内模式（不支持，不往项目仓库写）、写文件失败时回一句原因并注明「没有写入」。
 
@@ -624,10 +772,11 @@ cd '<项目目录>' && claude --session-id <新 UUID> -n '<短ID>' '开工 <长 
 - 只挂自己工具的 `tool.call`（`progress`、`bind`、`setup`、`workflow`、`project`、`guide`），不挂 tool.check、PreToolUse；`classic.SessionStart` 只记下会话来源，照常交给后面的钩子，不改不拦。
 - 不经你操作就往会话里发消息的只有首次自动发起这一次（条件见「首次自动发起」）；演练只在你点「[ 走一遍演练 ]」、输入 `/xiaoxiaoli tour` 或在设置引导里选「现在走」后才开始。
 - 体检里的检查（看会话里有没有某个前缀的工具、运行 `git --version` 这类版本命令）与安装都是会话里的 AI 做，装任何全局工具、MCP、skill 前先问你（写在演练脚本里，由 AI 遵守）；mod 不执行 `detect` 与 `install` 里的命令。
+- 插件带了一个由会话里的 AI 用命令行运行的脚本：发版工具 `tools/jenkins.mjs`（见「发版工具」）。它读你指给它的 `release.json` 与 `secrets.env`，密钥只用于登录 Jenkins，绝不输出（输出与报错先抹掉）；它只请求 `release.json` 里环境对应的 Jenkins：`check`、`status`、`console`、`wait` 只发 GET，`build` 带 `--yes` 才发 POST（先取 crumb），受保护的环境永远不发；配了 `compare` 时在当前目录运行只读的 git 命令（`ls-remote`、`cat-file`、`rev-list`）。运行它要经过 Claude Code 的命令权限确认，触发前要你同意写在工作流里，由 AI 遵守。mod 本身仍不读密钥、不运行它：只在工作流工具 get 与演练脚本里把 `{tools}` 换成它所在目录的绝对路径，在概况里看两处 `release.json` 在不在。
 - mod 自己运行的命令只有自动更新的两条：插件市场安装、发现新版时运行 `claude plugin marketplace update <市场名>` 与 `claude plugin update xiaoxiaoli@<市场名>`（Windows 上 `claude` 直接起不来时经 `cmd /c` 运行同样两条），每条最多 3 分钟；本地目录加载的不运行。更新成功后经 `$.command.run` 发起一次内置的 `/reload-plugins`。
 - 只写当前项目自己的配置与状态文件，外加全局档案：项目内模式写项目内的 `state.json`；全局模式写 `~/.claude/xiaoxiaoli/projects/<项目键>/` 下的 `config.json`（仅绑定、解绑与项目工具 set 改显示名、systems 时）与 `state.json`，只有进度文件的老项目状态写项目内那份 `state.json`；生成新会话命令前通用资料目录 `shared/` 不在时写一份说明用途的 `shared/README.md`，不碰 `resources.md`、`secrets.env`；不分模式，起名、设工种、先不设、首次自动发起记标记、演练收尾与「[ 不用了 ]」时写全局根目录下的 `profile.json`（版本比本 mod 新时不写）；演练工具 check 时写全局根目录下的 `env.json`（版本比本 mod 新时不写）；演练工具 start、finish 时在当前项目的状态文件里加、去演示条目；AI 经工作流工具 set、reset 时写全局根目录下的 `workflow.json`（个人自定义）或全局项目目录下的 `workflow.json`（项目自定义，项目内模式没有，不写），版本比本 mod 新时不写。不往项目仓库里写任何新文件。
-- 不读设置、不读密钥文件（含两处资料目录的 `secrets.env`、`resources.md`，项目工具只看它们在不在）；自动更新时读自己的 `plugin.json`。只读 `XIAOXIAOLI_PANE`、`XIAOXIAOLI_HOME`、`CLAUDE_CONFIG_DIR`、`USERPROFILE`、`HOME`、`XIAOLI_MODS_UPDATING`、`XIAOLI_MODS_RELOAD_AT` 这几个环境变量，只写 `XIAOXIAOLI_PANE` 与后两个（两个 mod 错开更新用，只在本进程内）。`$.store` 里除待办视图与迭代选择外，多记一个自动更新的日期 `updateCheckedDay`。
-- 网络：mod 自己只发自动更新的请求，GET 两个公开地址（`raw.githubusercontent.com` 与 `cdn.jsdelivr.net` 上本仓库主分支的 `mods/xiaoxiaoli/.claude-plugin/plugin.json` 与 `CHANGELOG.md`），不带请求头、查询参数与任何用户或项目信息，每天最多一轮；另外通过会话里已连接的 `tapd` MCP 服务器只读访问 TAPD（见第一条）。工作面板收起时也在拉待办：会话启动后的首次拉取，以及按 `refreshMinutes`（默认 10 分钟）的定时拉取都照常进行。
+- 不读设置、不读密钥文件（含两处资料目录的 `secrets.env`、`resources.md`、`release.json`，项目工具只看它们在不在）；自动更新时读自己的 `plugin.json`。只读 `XIAOXIAOLI_PANE`、`XIAOXIAOLI_HOME`、`CLAUDE_CONFIG_DIR`、`USERPROFILE`、`HOME`、`XIAOLI_MODS_UPDATING`、`XIAOLI_MODS_RELOAD_AT` 这几个环境变量，只写 `XIAOXIAOLI_PANE` 与后两个（两个 mod 错开更新用，只在本进程内）。`$.store` 里除待办视图与迭代选择外，多记一个自动更新的日期 `updateCheckedDay`。
+- 网络：mod 自己只发自动更新的请求（发版工具连 Jenkins 是会话里的 AI 运行它时发的，见上面那条），GET 两个公开地址（`raw.githubusercontent.com` 与 `cdn.jsdelivr.net` 上本仓库主分支的 `mods/xiaoxiaoli/.claude-plugin/plugin.json` 与 `CHANGELOG.md`），不带请求头、查询参数与任何用户或项目信息，每天最多一轮；另外通过会话里已连接的 `tapd` MCP 服务器只读访问 TAPD（见第一条）。工作面板收起时也在拉待办：会话启动后的首次拉取，以及按 `refreshMinutes`（默认 10 分钟）的定时拉取都照常进行。
 - 日志：debug 日志记待办条数、项目数与错误类型；异常（`$.mcp.call` 自己抛出的、工具注册失败、刷新工作面板失败等）另记原始信息的前 200 字符；解析 TAPD 返回出错时只记错误类型，TAPD 返回的正文不进日志。生成启动命令时把整条命令打一行进对话，方便复制。
 
 ## 测试
@@ -653,6 +802,14 @@ node -e "const fs=require('fs');const t=fs.readFileSync('tests/fixtures/guide.ts
 自动更新的测试：`hooks/update.ts` 的纯函数与流程 `runUpdateCheck` 用造的外部能力直接测（插件市场安装的路径、命令、锁、重载都在这里测，因为测试引擎里的插件目录总是本地目录）；经会话启动的几条用造的 `http.fetch` 核对请求的地址与选项、一天一查、不查的情况。造的世界经 `manifest` 回答 mod 自己的 `.claude-plugin/plugin.json`，默认读不到（自动更新这次就不查）。`hooks/update.ts` 与陪伴猫里的同名文件是同一份，改一处要两边一起改。
 
 演练相关的用例里写死了依赖清单的 id 顺序、各工种筛出来的项与几条演练文字，改了这两个文件后跟着改。
+
+发版工具的测试用 Node 自带的测试运行器，不在 `claude plugin test` 里（它只跑 `*.test.ts`、`*.test.tsx`）：
+
+```
+node --test <仓库>\mods\xiaoxiaoli\tools\jenkins.test.mjs
+```
+
+里面的 Jenkins、密钥、文件、git 与计时全是造的（脚本的外部能力都经 `io` 传进来，测试换成假的），不连任何真实地址；覆盖配置与密钥的查找顺序和合并、键名约定与令牌优先、默认不触发与受保护环境、参数白名单与可疑字符、`check` 的各项结果、输出与报错里不出现密钥、超时与等待上限、退出码，以及直接 `node jenkins.mjs` 运行。
 
 ## 已知限制
 
@@ -692,3 +849,9 @@ node -e "const fs=require('fs');const t=fs.readFileSync('tests/fixtures/guide.ts
 - 判断插件市场安装靠插件目录在不在 `cache/<市场名>/xiaoxiaoli/<版本>/` 下；Claude Code 以后改了缓存的目录结构，就会被当成本地目录加载、只提示不更新。
 - 自动发起的 `/reload-plugins` 会重新加载所有插件；官方文档写明重载会增删插件的 MCP 工具且让提示词缓存失效时不生效、要加 `--force`，这时按提示自己输入或重开会话。mod 不加 `--force`，免得替你作废缓存。
 - `claude plugin update` 的成功输出官方文档没有写全，判断「更新上了」只看两条命令的退出码，与输出里「already at the latest version (<版本>)」这一句。
+- 发版工具只支持 Jenkins（账号加令牌或口令的 Basic 认证，带 CSRF crumb）；别的 CI、发布平台按项目自己的方式，AI 照资料里记的做。
+- 发版工具通用化后只用造的 Jenkins 测过，还没在真实 Jenkins 上跑过：第一次用先跑 `check`，再跑一次不带 `--yes` 的 `build` 核对参数。`whoAmI`、crumb、`buildWithParameters` 都是 Jenkins 的标准接口，装了特殊安全插件的 Jenkins 可能不一样。
+- 「受保护」是工具这一层的保护，防的是 AI 误触发：有权限的账号照样能在 Jenkins 网页上操作。生产最好不配密钥，或用没有构建权限的账号。
+- 预计构建号是触发前 job 的 `nextBuildNumber`：几乎同时有别人触发时，`wait` 的那个号可能不是这次的，拿不准用 `wait last` 或 `status` 核对。
+- `{tools}` 只在工作流工具 get 与演练脚本里替换；项目内模式沿用代码里的前端步骤（不带细则），发版按项目内文档，用不到它。
+- 发版工具的时间按本机时区显示；`compare` 要在项目的 git 仓库目录下运行才数得出提交。
