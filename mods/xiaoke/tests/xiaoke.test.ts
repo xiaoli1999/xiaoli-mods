@@ -87,15 +87,16 @@ const at = (h: number, m = 0, s = 0) => DAY0 + h * 3_600_000 + m * 60_000 + s * 
  * store 传 null 时不接 $.store，由测试自己接（要在测试里直接改存储内容时用）
  */
 async function boot($: Engine, on: On, nowMs: number, store: Record<string, unknown> | null = {}) {
-  const seen = { toasts: 0, notifies: 0, commands: [] as string[], descriptions: [] as string[], hints: [] as string[] }
+  const seen = { toasts: 0, notifies: 0, notifyTitles: [] as string[], commands: [] as string[], descriptions: [] as string[], hints: [] as string[] }
   if (store !== null) mock.store(on, store)
   const clock = mock.clock(on, { now: nowMs })
   on('ui.toast', () => {
     seen.toasts += 1
     return { value: undefined }
   })
-  on('ui.notify', () => {
+  on('ui.notify', (_$, e) => {
     seen.notifies += 1
+    seen.notifyTitles.push(e.title ?? '')
     return { value: { isSent: false as const, reason: 'no-surface' as const } }
   })
   on('command.register', (_$, e) => {
@@ -479,7 +480,7 @@ describe('真实台词', () => {
 
   test('提问时零 token：模板句直接引用问题开头', () => {
     const line = startEcho(facts.prompt, () => 0)
-    expect(line).toBe('收到「帮我查一下批量保存为什么会…」，我在旁边盯着～')
+    expect(line).toBe('收到「帮我查一下批量保存为什么会…」，我在旁边陪着～')
   })
 
   test('只有值得说的轮次才调 haiku：被打断、没用工具的短闲聊都跳过', () => {
@@ -536,8 +537,8 @@ describe('提醒气泡（画法和点击）', () => {
   const base: BubbleProps = {
     id: 1,
     layout: 'full',
-    width: 44,
-    title: '久坐提醒 · 起来走走',
+    width: 46,
+    title: '小黎 · 久坐提醒 · 起来走走',
     text: '12 点啦，站起来走两步、伸个懒腰吧',
     color: '#ff9f43',
     countdown: '还剩 2:55',
@@ -549,12 +550,12 @@ describe('提醒气泡（画法和点击）', () => {
   const joined = (p: BubbleProps) => bubbleRows(p, false).map(row => row.map(seg => seg.text).join(''))
 
   test('4 行圆角气泡：每行一样宽、右边框对得齐，尾巴在第 3 行指向小克，按钮嵌在下边框', () => {
-    // 宽 44：标题 19 列、倒计时 9 列，上边框补 7 条线；台词 33 列，补 6 个空格；进度线 39 格剩 97%
+    // 宽 46：标题 26 列、倒计时 9 列，上边框补 2 条线；台词 33 列，补 8 个空格；进度线 41 格剩 97%
     expect(joined(base)).toEqual([
-      ` ╭─ 久坐提醒 · 起来走走 ${'─'.repeat(7)} 还剩 2:55 ─╮`,
-      ` │ 12 点啦，站起来走两步、伸个懒腰吧${' '.repeat(6)} │`,
-      `◀┤ ${'━'.repeat(38)}─ │`,
-      ` ╰${'─'.repeat(25)}  0:55 后可点  ─╯`,
+      ` ╭─ 小黎 · 久坐提醒 · 起来走走 ${'─'.repeat(2)} 还剩 2:55 ─╮`,
+      ` │ 12 点啦，站起来走两步、伸个懒腰吧${' '.repeat(8)} │`,
+      `◀┤ ${'━'.repeat(40)}─ │`,
+      ` ╰${'─'.repeat(27)}  0:55 后可点  ─╯`,
     ])
     for (const width of [40, 44, 52, 64]) {
       for (const text of ['短', '很长的台词'.repeat(12)]) {
@@ -577,7 +578,8 @@ describe('提醒气泡（画法和点击）', () => {
 
   test('宽度跟着内容走，不撑满整行，最多 64 列', () => {
     const labels = ['我起来啦', '0:00 后可点']
-    expect(bubbleWidth({ title: base.title, text: '补充点水分', labels }, 200)).toBe(40)
+    // 台词很短时由标题行定宽：标题 26 列 + 倒计时 9 列 + 边框与间隔 10 列 = 45（0.5.4 标题加上「小黎 · 」前是最小宽度 40）
+    expect(bubbleWidth({ title: base.title, text: '补充点水分', labels }, 200)).toBe(45)
     expect(bubbleWidth({ title: base.title, text: '长'.repeat(50), labels }, 200)).toBe(64)
     expect(bubbleWidth({ title: base.title, text: '长'.repeat(50), labels }, 50)).toBe(50)
   })
@@ -586,14 +588,14 @@ describe('提醒气泡（画法和点击）', () => {
     const ready = { ...base, button: { label: '我起来啦', isReady: true } }
     // full：按钮前全是边框线，没有中文，口径不影响
     const hits = [...Array(80).keys()].filter(x => hitButton(ready, x, 3))
-    expect(Math.min(...hits)).toBe(44 - 6 - 10 + 3 - 1)
+    expect(Math.min(...hits)).toBe(46 - 6 - 10 + 3 - 1)
     expect(hitButton(ready, hits[0] ?? 0, 2)).toBe(false)
-    // compact：按钮前面有中文标题和倒计时；按 1.5 列口径上报时区间是 [29, 37)，按正常口径会点歪
+    // compact：按钮前面有中文标题和倒计时；按 1.5 列口径上报时区间是 [35, 43)，按正常口径会点歪
     const compact: BubbleProps = { ...ready, layout: 'compact', width: 80, map: { off: 0, cjk: 1.5 } }
-    expect(hitButton(compact, 29, 0)).toBe(true)
-    expect(hitButton(compact, 36, 0)).toBe(true)
-    expect(hitButton(compact, 39, 0)).toBe(false)
-    expect(hitButton({ ...compact, map: DEFAULT_MAP }, 29, 0)).toBe(false)
+    expect(hitButton(compact, 35, 0)).toBe(true)
+    expect(hitButton(compact, 42, 0)).toBe(true)
+    expect(hitButton(compact, 45, 0)).toBe(false)
+    expect(hitButton({ ...compact, map: DEFAULT_MAP }, 35, 0)).toBe(false)
   })
 })
 
@@ -630,7 +632,7 @@ describe('定点提醒（10/12/16/18 久坐，11/15/17 喝水）', () => {
     expect(client?.props.height).toBe(4)
     expect(client?.props.width).toBeLessThanOrEqual(64)
     expect((await ui.find({ type: 'Client', key: 'avatar' }))?.props.width).toBe(AVATAR_SIZE.full.columns)
-    expect(await bubbleText(ui, /^久坐提醒 · 起来走走$/)).toBeDefined()
+    expect(await bubbleText(ui, /^小黎 · 久坐提醒 · 起来走走$/)).toBeDefined()
     expect(await bubbleText(ui, /^还剩 2:5\d$/)).toBeDefined()
     expect(await bubbleText(ui, /0:5\d 后可点/)).toBeDefined()
     expect(seen.toasts).toBe(0)
@@ -1770,5 +1772,125 @@ describe('0.5.1：名字改回小克', () => {
     expect(KEEP_PROMPT).not.toMatch(/小黎(?!\s*mods)/)
     expect(L.greeting(10, 1)).toContain('我是小克')
     expect(L.WHISPER_THINKING).toBe('小克歪着头想了想…')
+  })
+})
+
+describe('0.5.4：提示用语与小黎的提醒', () => {
+  /** 让人联想到阴森、被监视、被命令、被当小孩哄的说法，台词里一个都不能有 */
+  const BANNED = ['下面', '盯着', '偷偷', '不许', '真乖']
+  const SIT_TITLE = '小黎 · 久坐提醒 · 起来走走'
+  const WATER_TITLE = '小黎 · 喝水提醒 · 喝口水'
+
+  /** 台词库里所有写死的句子（字符串、数组、按种类分的表），加上各时段的问候与开头模板句；人设是函数，不在这里 */
+  const allLines = (): string[] => {
+    const out: string[] = []
+    const take = (value: unknown) => {
+      if (typeof value === 'string') out.push(value)
+      else if (Array.isArray(value)) value.forEach(take)
+      else if (value !== null && typeof value === 'object') Object.values(value).forEach(take)
+    }
+    for (const value of Object.values(L)) if (typeof value !== 'function') take(value)
+    for (let hour = 0; hour < 24; hour += 1) for (const days of [1, 5]) out.push(L.greeting(hour, days))
+    for (let i = 0; i < 4; i += 1) out.push(startEcho('帮我看看这个报错', () => i))
+    return out
+  }
+
+  test('全部台词不含「下面」「盯着」「偷偷」「不许」「真乖」；点名改掉的几句换成了新说法', () => {
+    const lines = allLines()
+    expect(lines.length).toBeGreaterThan(80)
+    expect(lines.filter(line => BANNED.some(word => line.includes(word)))).toEqual([])
+    expect(L.REST_DONE).toContain('好啦，继续加油，有事随时叫我')
+    expect(L.TURN_START).toContain('收到～我趴在这儿看 Claude 干活')
+    expect(L.KEEP_DONE).toContain('顺手帮你续了下缓存～回来不用重新读上下文')
+    expect(L.REST_STAY).toContain('先别急着回去干活，还有 {left} 哦')
+    expect(L.REST_FINISHED.water).toContain('喝完啦？脑子又转起来了～')
+    expect(L.SIT).toContain('起来活动一下肩颈，这儿有我呢')
+    expect(startEcho('帮我看看这个报错', () => 0)).toBe('收到「帮我看看这个报错」，我在旁边陪着～')
+  })
+
+  test('久坐、喝水台词各有一句以小黎名义说的话；提醒台词进带边框的气泡，不用省略号，最宽的气泡里放得下', () => {
+    expect(L.SIT).toContain('小黎让我提醒你：该起来走走啦')
+    expect(L.WATER).toContain('小黎让我提醒你：喝口水再继续')
+    for (const template of [...L.SIT, ...L.WATER]) {
+      const text = L.fill(template, { hh: 18 })
+      expect(/…|\.\.\./.test(text)).toBe(false)
+      // 最宽 64 列的气泡里台词那一行能放 59 列
+      expect(displayWidth(text)).toBeLessThanOrEqual(59)
+    }
+  })
+
+  test('久坐、喝水的气泡标题与系统通知标题都是「小黎 · 久坐提醒 · 起来走走」这种三段写法，通知不再叠「小克 · 」；手动休息的标题不变、也不发通知', { timeoutMs: 30_000 }, async ($, on) => {
+    const { clock, seen } = await boot($, on, at(9, 59, 50))
+    const ui = await mountBand($)
+    await clock.advance(15_000)
+    expect(await bubbleText(ui, new RegExp(`^${SIT_TITLE}$`))).toBeDefined()
+    expect((await bubbleOf(ui))?.title).toBe(SIT_TITLE)
+    expect(seen.notifyTitles).toEqual([SIT_TITLE])
+    // 10:40 回来点了下小克（人在），11 点弹喝水
+    await clock.set(at(10, 40))
+    await ui.pointer({ type: 'down', x: 4, y: 0, button: 'left', in: 'avatar' })
+    await clock.set(at(11, 0, 5))
+    expect(await bubbleText(ui, new RegExp(`^${WATER_TITLE}$`))).toBeDefined()
+    expect(seen.notifyTitles).toEqual([SIT_TITLE, WATER_TITLE])
+    await ui.unmount()
+    // 手动休息是用户自己发起的：标题仍是「休息一下」，不发系统通知
+    await clock.set(at(13, 0))
+    await $.command.run({ command: 'xiaoke', args: 'rest', ...COMMAND_ENV })
+    const rest = await mountBand($)
+    expect((await bubbleOf(rest))?.title).toBe('休息一下')
+    expect(seen.notifies).toBe(2)
+    await rest.unmount()
+  })
+
+  test('新标题下气泡宽度与截断：放得下时标题完整，终端窄时标题以「…」截断，边框不歪；2 行紧凑气泡不超宽', () => {
+    const widthOf = (row: readonly Seg[]) => row.reduce((w, seg) => w + displayWidth(seg.text), 0)
+    const cases = [
+      { title: SIT_TITLE, done: '我起来啦', need: 45 },
+      { title: WATER_TITLE, done: '喝完啦', need: 43 },
+    ]
+    for (const { title, done, need } of cases) {
+      const labels = [done, '0:00 后可点']
+      // 标题 + 倒计时 + 边框与间隔：久坐 26 + 9 + 10 = 45；喝水 24 + 9 + 10 = 43，都超过最小宽度 40
+      expect(bubbleWidth({ title, text: '补充点水分', labels }, 200)).toBe(need)
+      expect(bubbleWidth({ title, text: '补充点水分', labels }, 30)).toBe(30)
+      const props: BubbleProps = {
+        id: 1,
+        layout: 'full',
+        width: need,
+        title,
+        text: '小黎让我提醒你：该起来走走啦',
+        color: '#ff9f43',
+        countdown: '还剩 2:55',
+        left: 0.5,
+        button: { label: done, isReady: true },
+        map: DEFAULT_MAP,
+      }
+      const top = (p: BubbleProps) => (bubbleRows(p, false)[0] ?? []).map(seg => seg.text).join('')
+      expect(top(props)).toContain(title)
+      for (const width of [20, 24, 30, 36, 40, 42, 43, 44, 45, 46, 64]) {
+        const rows = bubbleRows({ ...props, width }, false)
+        expect(rows).toHaveLength(4)
+        for (const row of rows) expect(widthOf(row)).toBe(width)
+        const shown = top({ ...props, width })
+        if (width < need) expect(shown.includes(title)).toBe(false)
+        if (width < need) expect(shown).toContain('…')
+        if (width >= need) expect(shown).toContain(title)
+      }
+      // 2 行紧凑气泡：边框外的固定部分（尾巴、倒计时、按钮、间隔）要 25 列左右，标题按剩下的宽度截
+      for (const width of [30, 40, 80]) {
+        const rows = bubbleRows({ ...props, layout: 'compact', width }, false)
+        expect(rows).toHaveLength(2)
+        for (const row of rows) expect(widthOf(row)).toBeLessThanOrEqual(width)
+      }
+    }
+  })
+
+  test('两处模型人设都加了用语要求（语气阳光，不说阴森、像在监视人的话）；reactSystem 仍不到 90 字', () => {
+    expect(reactSystem()).toContain('阳光')
+    expect(reactSystem()).toContain('不说在你下面、盯着你、偷偷这类阴森或监视感的话')
+    expect(reactSystem()).toContain('只说这轮真实发生的事')
+    expect(reactSystem().length).toBeLessThan(90)
+    expect(L.whisperSystem()).toContain('语气阳光、亲切')
+    expect(L.whisperSystem()).toContain('不说阴森或像在监视人的话（如「在你下面」「盯着你」「偷偷」）')
   })
 })
