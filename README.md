@@ -22,19 +22,20 @@
 
 ## 安装
 
-用插件市场装，两条命令一次装好两个 mod：
+在终端里粘贴这一行，两个 mod 一次装好（PowerShell、bash、zsh 都可以；需要 Claude Code 2.1.275 及以后）：
+
+```
+claude plugin install xiaoxiaoli --marketplace xiaoli1999/xiaoli-mods; claude plugin install xiaoke --marketplace xiaoli1999/xiaoli-mods
+```
+
+这一行做了两件事：先装工作面板 `xiaoxiaoli`（还没登记过插件市场 `xiaoli-mods` 的话会顺带登记上），再装陪伴猫小克 `xiaoke`。只想要其中一个，就只留分号前面或后面的那一半。
+
+Claude Code 版本较旧、提示不认识 `--marketplace` 时，分三条装，效果相同：
 
 ```
 claude plugin marketplace add xiaoli1999/xiaoli-mods
 claude plugin install xiaoxiaoli@xiaoli-mods
 claude plugin install xiaoke@xiaoli-mods
-```
-
-只要其中一个就只装那一个。也可以在会话里一步装（Claude Code 2.1.275 及以后）：
-
-```
-/plugin install xiaoxiaoli --marketplace xiaoli1999/xiaoli-mods
-/plugin install xiaoke --marketplace xiaoli1999/xiaoli-mods
 ```
 
 装好后重开 Claude Code，或在会话里输入 `/reload-plugins`。工作流 skill 随工作面板一起装，不用另外复制；以前自己复制到 `~/.claude/skills/xiaoli-workflow` 的，装好后把那份删掉，免得两份不一致。
