@@ -4,17 +4,19 @@
 
 ## 安装
 
-插件市场（推荐，装好后每天自动更新，见「自动更新」）：
+一条命令（推荐，装好后每天自动更新，见「自动更新」；需要 Claude Code 2.1.275 及以后）：
+
+```
+claude plugin install xiaoke --marketplace xiaoli1999/xiaoli-mods
+```
+
+小克声明了依赖工作面板（`xiaoxiaoli`），所以这一条会把两个 mod 一起装好，也就是整个 AI 工作台。小克不能单独安装：缺了工作面板它不会启用。
+
+Claude Code 版本较旧、提示不认识 `--marketplace` 时，分两条装，效果相同：
 
 ```
 claude plugin marketplace add xiaoli1999/xiaoli-mods
 claude plugin install xiaoke@xiaoli-mods
-```
-
-在会话里也可以一步装好（Claude Code 2.1.275 及以后）：
-
-```
-/plugin install xiaoke --marketplace xiaoli1999/xiaoli-mods
 ```
 
 装好后重开会话，或在会话里输入 `/reload-plugins`。

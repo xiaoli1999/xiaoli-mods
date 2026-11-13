@@ -22,19 +22,18 @@
 
 ## 安装
 
-在终端里粘贴这一行，两个 mod 一次装好（PowerShell、bash、zsh 都可以；需要 Claude Code 2.1.275 及以后）：
+一条命令装好整个 AI 工作台（需要 Claude Code 2.1.275 及以后）：
 
 ```
-claude plugin install xiaoxiaoli --marketplace xiaoli1999/xiaoli-mods; claude plugin install xiaoke --marketplace xiaoli1999/xiaoli-mods
+claude plugin install xiaoke --marketplace xiaoli1999/xiaoli-mods
 ```
 
-这一行做了两件事：先装工作面板 `xiaoxiaoli`（还没登记过插件市场 `xiaoli-mods` 的话会顺带登记上），再装陪伴猫小克 `xiaoke`。只想要其中一个，就只留分号前面或后面的那一半。
+装的是陪伴猫小克 `xiaoke`；它声明了依赖工作面板 `xiaoxiaoli`，所以工作面板会被一起装上，还没登记过的插件市场 `xiaoli-mods` 也会顺带登记。只想要工作面板、不要小克的，把命令里的 `xiaoke` 换成 `xiaoxiaoli`；小克不能单独装。
 
-Claude Code 版本较旧、提示不认识 `--marketplace` 时，分三条装，效果相同：
+Claude Code 版本较旧、提示不认识 `--marketplace` 时，分两条装，效果相同：
 
 ```
 claude plugin marketplace add xiaoli1999/xiaoli-mods
-claude plugin install xiaoxiaoli@xiaoli-mods
 claude plugin install xiaoke@xiaoli-mods
 ```
 
