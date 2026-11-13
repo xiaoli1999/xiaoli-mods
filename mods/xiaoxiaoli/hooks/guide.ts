@@ -8,6 +8,7 @@
 import type { CheckResultType, DepKindType, DepType, EnvStateType, FlowType, ProgressTaskType, TourType, WorkRole, WorkflowStepType } from '../types'
 import { WORK_ROLES } from './profile'
 import { DEMO_ID, flowSteps } from './workbench'
+import { fillTools } from './workflow'
 
 /** 依赖清单与演练脚本的位置，相对 mod 目录 */
 export const DEPS_FILE = 'guide/deps.json'
@@ -85,6 +86,8 @@ export interface TourScriptOptionsType {
     dataDir: string
     /** 本项目概况（project 工具 get 的内容） */
     overview: string
+    /** 插件目录下 tools 的绝对路径：脚本里的 {tools} 换成它（演练里要运行发版工具的 check）；不传或 '' 为不换 */
+    toolsDir?: string
 }
 
 /** 体检结果的整理：收下的、不认识的 id、值不对的 id */
@@ -266,11 +269,11 @@ const stepLines = (step: TourStepType, index: number): string[] => [
 /**
  * start 返回给 AI 的演练脚本，顺序：开头几行（演示条目与进度怎么报、演练工具怎么调、资料记在哪、工种与工作流）→ 总规则 →
  * 第一部分体检（做法与本工种依赖清单）→ 第二部分走流程（每个环节的序号、步骤键、标题、真实使用时做什么、演练时验证什么）→
- * 第三部分功能点 → 收尾 → 本项目概况。
- * @param options 脚本、依赖、工种、工作流、环节、两处资料目录与项目概况
+ * 第三部分功能点 → 收尾 → 本项目概况。给了 toolsDir 时全文的 {tools} 换成它。
+ * @param options 脚本、依赖、工种、工作流、环节、两处资料目录、项目概况与 tools 目录
  * @returns 脚本全文
  */
-export const tourScript = ({ tour, deps, roleTitle, workflowLabel, stepList, sharedDir, dataDir, overview }: TourScriptOptionsType): string => {
+export const tourScript = ({ tour, deps, roleTitle, workflowLabel, stepList, sharedDir, dataDir, overview, toolsDir = '' }: TourScriptOptionsType): string => {
     const lastKey = stepList.at(-1)?.key ?? ''
     const shared = sharedDir === '' ? '取不到用户目录，没有通用资料目录' : `各项目通用的记进通用资料目录 ${sharedDir}`
     const data = dataDir === '' ? '本项目是项目内模式，只属于本项目的按项目内文档约定的位置记' : `只属于本项目的记进项目资料目录 ${dataDir}`
@@ -292,7 +295,7 @@ export const tourScript = ({ tour, deps, roleTitle, workflowLabel, stepList, sha
         ['本项目概况', overview]
     ]
 
-    return sectionList.map(lineList => lineList.join('\n')).join('\n\n')
+    return fillTools(sectionList.map(lineList => lineList.join('\n')).join('\n\n'), toolsDir)
 }
 
 /**

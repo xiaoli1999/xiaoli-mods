@@ -1,17 +1,22 @@
 /**
  * @description 工种与工作流：工作流定义的校验（步骤数、键、标题、细则长度、版本）、三层查找（项目自定义 → 个人自定义 → 内置工种）
- * 与不合格时的降级和提示、新条目按哪套步骤建（与旧的前端步骤相同时建成旧样式）、workflow 工具的参数校验与返回文字；纯函数便于测试
+ * 与不合格时的降级和提示、新条目按哪套步骤建（与旧的前端步骤相同时建成旧样式）、workflow 工具的参数校验与返回文字
+ * （返回时把细则里的 {tools} 换成插件目录下 tools 的绝对路径）；纯函数便于测试
  * @author xiao li
  * @createDate 2026-11-12 18:00
  */
 import type { ActiveWorkflowType, FlowType, ProgressKind, WorkRole, WorkflowSource, WorkflowStepType, WorkflowType } from '../types'
-import { BUG_STEPS, SLOW_STEP_KEYS, STEP_KEY_LIMIT, STORY_STEPS, isStepKey } from './workbench'
+import { BUG_STEPS, SLOW_STEP_KEYS, STEP_KEY_LIMIT, STORY_STEPS, isStepKey, joinPath } from './workbench'
 import { ROLE_TITLES } from './profile'
 
 /** 自定义工作流的文件名：全局根目录下为个人自定义，全局项目目录下为项目自定义 */
 export const WORKFLOW_FILE = 'workflow.json'
 /** 内置工作流所在的目录，相对 mod 目录，文件名为工种 id */
 export const WORKFLOW_DIR = 'workflows'
+/** 随插件发的命令行工具所在的目录，相对 mod 目录（发版工具 jenkins.mjs 在这里） */
+export const TOOLS_DIR = 'tools'
+/** 细则里的占位符：workflow 工具 get 返回给 AI 时换成插件目录下 tools 的绝对路径；存盘的定义不换 */
+export const TOOLS_PLACEHOLDER = '{tools}'
 /** 工作流定义的结构版本；比它新的不采用、不覆盖 */
 export const WORKFLOW_VERSION = 1
 /** 每组步骤最多几步 */
@@ -327,16 +332,46 @@ export const toWorkflowInput = (raw: Record<string, unknown>): WorkflowInputType
 }
 
 /**
+ * 插件目录下 tools 的绝对路径，统一成正斜杠（Windows 上 node、PowerShell、Git Bash 都认，拼进 JSON 也不用转义反斜杠）。
+ * @param pluginRoot 插件目录（$.plugin.root），取不到为 ''
+ * @returns tools 目录，取不到为 ''
+ */
+export const toolsDirOf = (pluginRoot: string): string => (pluginRoot === '' ? '' : joinPath(pluginRoot, TOOLS_DIR).replace(/\\/g, '/'))
+
+/**
+ * 把文字里的 {tools} 换成 tools 目录；目录为 '' 时原样返回。用 split / join，路径里有 $ 也不会被当成替换模式。
+ * @param text 文字
+ * @param toolsDir tools 目录
+ * @returns 换好的文字
+ */
+export const fillTools = (text: string, toolsDir: string): string => (toolsDir === '' ? text : text.split(TOOLS_PLACEHOLDER).join(toolsDir))
+
+/** 一步的细则（what、tools、output、ask、rules）里换掉 {tools}，key、title、slow 不动 */
+const fillStepTools = (step: WorkflowStepType, toolsDir: string): WorkflowStepType => {
+    const filled: WorkflowStepType = { ...step }
+    for (const field of TEXT_FIELDS) {
+        const value = step[field]
+        if (value !== undefined) filled[field] = fillTools(value, toolsDir)
+    }
+    if (step.rules !== undefined) filled.rules = step.rules.map(i => fillTools(i, toolsDir))
+
+    return filled
+}
+
+/**
  * workflow 工具 get 的返回：一行来源说明（含进行中的条目不受影响），自定义不合格时再加说明，最后是定义的 JSON；
- * 给了 kind 时只带那一组步骤，省 token。
+ * 给了 kind 时只带那一组步骤，省 token。给了 toolsDir 时把细则里的 {tools} 换成它（内置与自定义的都换，只换返回的文字，不改存盘的定义）。
  * @param active 生效的工作流
  * @param kind 只要哪一组，不传为两组
+ * @param toolsDir 插件目录下 tools 的绝对路径，不传或 '' 为不换
  * @returns 返回文字
  */
-export const workflowText = (active: ActiveWorkflowType, kind?: ProgressKind): string => {
-    const { version, id, title, branch, story, bug } = active.workflow
+export const workflowText = (active: ActiveWorkflowType, kind?: ProgressKind, toolsDir = ''): string => {
+    const { version, id, title, branch } = active.workflow
+    const story = active.workflow.story.map(i => fillStepTools(i, toolsDir))
+    const bug = active.workflow.bug.map(i => fillStepTools(i, toolsDir))
     const head = { version, ...(id === undefined ? {} : { id }), ...(title === undefined ? {} : { title }), branch }
-    const body = kind === undefined ? { ...head, story, bug } : { ...head, [kind]: active.workflow[kind] }
+    const body = kind === undefined ? { ...head, story, bug } : { ...head, [kind]: kind === 'story' ? story : bug }
     const where = active.path === '' ? '' : `（${active.path}）`
     const source = `来源：${active.label}${where}；${branch ? '开工建分支' : '开工不建分支'}；进行中的条目按各自开工时记下的步骤走，不受它影响`
 

@@ -8,7 +8,9 @@
  * AI 经 mcp__xiaoxiaoli__workflow 查看与调整工作流，/xiaoxiaoli role 改工种；项目差异（显示名、用到的系统）存全局项目配置，
  * 经 mcp__xiaoxiaoli__project 与 /xiaoxiaoli project 查看与修改，记着不用 TAPD 的项目不调 TAPD；开工给出通用与项目两处资料目录；
  * 体检与演练：设置引导多问一步、/xiaoxiaoli tour 与面板「走一遍演练」让 AI 调 mcp__xiaoxiaoli__guide，start 放演示条目并给脚本，
- * check 记体检结果（全局根目录 env.json），finish 收尾并在档案里记演练已走过；面板「不用了」记进档案不再显示
+ * check 记体检结果（全局根目录 env.json），finish 收尾并在档案里记演练已走过；面板「不用了」记进档案不再显示；
+ * 随插件发的发版工具（tools/jenkins.mjs）由会话里的 AI 运行，mod 只在工作流 get 与演练脚本里把 {tools} 换成它所在目录的绝对路径，
+ * 概况里只看两处资料目录的 release.json 在不在
  * @author xiao li
  * @createDate 2026-10-21 18:05
  */
@@ -75,6 +77,7 @@ import {
     worktreeOf
 } from './launch'
 import {
+    RELEASE_FILE,
     RESOURCE_FILES,
     SHARED_DIR,
     SHARED_README_FILE,
@@ -118,6 +121,7 @@ import {
     repoWorkflow,
     scopeLabel,
     toWorkflowInput,
+    toolsDirOf,
     workflowFileText,
     workflowText
 } from './workflow'
@@ -259,7 +263,8 @@ const WORKFLOW_DESCRIPTION = [
     'AI 工作台：查看与调整当前项目开工用的工作流（步骤、每步细则、要先问用户的地方）。查找顺序：项目自定义',
     '（~/.claude/xiaoxiaoli/projects/<项目键>/workflow.json）→ 个人自定义（~/.claude/xiaoxiaoli/workflow.json）→ 内置（按用户的工种：前端、后端、Python、测试、产品、其他）。',
     'action=get：开工消息要求取工作流时调，kind 传 story（需求与任务）或 bug（缺陷）只取那一组；返回来源说明与定义 JSON，',
-    '照它的步骤与 what、tools、output、ask（要不要先问）、rules 走，进度上报（mcp__xiaoxiaoli__progress）用它的步骤键。',
+    '照它的步骤与 what、tools、output、ask（要不要先问）、rules 走，进度上报（mcp__xiaoxiaoli__progress）用它的步骤键；',
+    '返回的细则里 {tools} 已换成插件目录下 tools 的绝对路径（发版工具 jenkins.mjs 在那里），存盘的定义里仍写 {tools}。',
     'action=set：只有用户明确要求调整工作流时才调（如「这个项目去掉写文档这一步」「以后我的流程都加一步代码评审」）；改之前先 get，',
     '在它的基础上改，没让改的步骤与细则原样保留，传完整的 definition（story、bug，可选 branch、title）；scope=project 只对本项目，personal 对用户的所有项目。',
     'action=reset：用户要求恢复时调，scope 指去掉哪一层的自定义，回到下一层。改动只影响之后新开工的条目，进行中的条目按各自开工时的步骤走。',
@@ -270,7 +275,7 @@ const PROJECT_DESCRIPTION = [
     'AI 工作台：查看与修改当前项目的配置差异，存在全局项目目录的 config.json（~/.claude/xiaoxiaoli/projects/<项目键>/config.json），不往项目仓库写文件。',
     '用户说「这个项目显示成某某」「这个项目不用 TAPD」「这个项目用语雀 / 不用 figma」，或你需要了解本项目配置概况时调用。',
     'action=get：一次返回显示名与目录名、绑定的 TAPD 项目、systems、通用资料目录（~/.claude/xiaoxiaoli/shared）与项目资料目录的位置、',
-    '两处 resources.md 与 secrets.env 在不在（不读内容）、生效工作流的来源、工作台名字与工种。',
+    '两处 resources.md 与 secrets.env 在不在（不读内容）、两处发版配置 release.json 在不在（发版工具读，优先用项目的）、生效工作流的来源、工作台名字与工种。',
     'action=set：displayName 改工作面板上显示的项目名（1 到 20 个字符，传空字符串清掉、回到目录名）；systems 与已有的合并，值 true 用、false 不用、null 去掉（回到没说，按用到处理），',
     `约定的键 ${SYSTEM_KEYS.join('、')}，别的键也照存。只有 tapd=false 会让工作面板不列 TAPD 项目、不拉待办（之后绑定 TAPD 项目时自动改回 true）；`,
     '其余键本 mod 不解释，供你判断哪些环节跳过（如 yuque=false 时不读语雀）。各项目通用的资料（resources.md、secrets.env）放通用资料目录，和通用不一样的放项目资料目录。',
@@ -1552,7 +1557,8 @@ const workflowEffectText = (active: ActiveWorkflowType): string =>
 const runWorkflowTool = async ($: Dollar, raw: Record<string, unknown>): Promise<{ result: string } | { deny: string }> => {
     const input = toWorkflowInput(raw)
     if (typeof input === 'string') return { deny: await say($, `参数不对，${input}，没有写入`) }
-    if (input.action === 'get') return { result: workflowText(await loadWorkflow($), input.kind) }
+    /* 返回给 AI 的细则里 {tools} 换成插件目录下 tools 的绝对路径；存盘的定义不换 */
+    if (input.action === 'get') return { result: workflowText(await loadWorkflow($), input.kind, toolsDirOf($.plugin.root)) }
 
     const checked = input.action === 'set' ? checkWorkflow(input.definition) : undefined
     if (checked !== undefined && 'reason' in checked) return { deny: await say($, `definition 不合格：${checked.reason}，没有写入`) }
@@ -1854,6 +1860,15 @@ const runAction = async ($: Dollar, action: string, surface: RenderSurface): Pro
     if (action === ACTION_SCOPE) await switchScope($)
 }
 
+/** 某个路径在不在：只问在不在、不读内容，问不了当作不在 */
+const existsSafe = async ($: Dollar, path: string): Promise<boolean> => {
+    try {
+        return await $.fs.exists(path)
+    } catch {
+        return false
+    }
+}
+
 /**
  * 一个资料目录的位置与两个资料文件（resources.md、secrets.env）在不在：只问在不在，不读内容。
  * @param $ 引擎接口
@@ -1899,6 +1914,10 @@ const projectSummary = async ($: Dollar): Promise<string> => {
         systems: place?.systems ?? {},
         shared: sharedDir === '' ? null : await resourceDirOf($, sharedDir),
         data: isRepoMode || place === null ? null : await resourceDirOf($, place.dataDir),
+        release: {
+            shared: sharedDir === '' ? null : await existsSafe($, joinDir(sharedDir, RELEASE_FILE)),
+            data: isRepoMode || place === null ? null : await existsSafe($, joinDir(place.dataDir, RELEASE_FILE))
+        },
         workflowLabel: active.label,
         fullName: fullNameOf(nameOf(state)),
         role: { title: ROLE_TITLES[roleOf(state)], isDefault: state.role === '' },
@@ -1947,7 +1966,9 @@ const runGuideStart = async ($: Dollar): Promise<{ result: string } | { deny: st
         stepList: tourStepsOf(tour.tour, active.workflow.id ?? active.id, active.workflow.story),
         sharedDir: await sharedDirOf($),
         dataDir: place.mode === 'global' ? place.dataDir : '',
-        overview: await projectSummary($)
+        overview: await projectSummary($),
+        /* 演练里发版那一环要运行发版工具的 check，脚本里的 {tools} 换成插件目录下 tools 的绝对路径 */
+        toolsDir: toolsDirOf($.plugin.root)
     })
     return { result: script }
 }

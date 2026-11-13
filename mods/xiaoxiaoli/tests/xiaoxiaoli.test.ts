@@ -8,7 +8,8 @@
  * 0.6.0 的工种与工作流（内置定义校验、三层查找与降级、按工作流建条目、不建分支的开工、workflow 工具、role 命令），
  * 0.7.0 的通用配置与项目差异（通用资料目录、displayName、systems、不用 TAPD、project 工具与命令），
  * 0.8.0 的体检与演练（两份文件的宽松读取、按工种筛依赖、演练文字与工作流配对、演练脚本、演示条目、guide 工具、三个入口、体检缺项），
- * 0.9.0 的自动更新（版本比较、CHANGELOG 截要点、安装方式、一天一查、两个地址回退、市场安装的更新与重载、本地目录只提示、不查的情况）
+ * 0.9.0 的自动更新（版本比较、CHANGELOG 截要点、安装方式、一天一查、两个地址回退、市场安装的更新与重载、本地目录只提示、不查的情况），
+ * 0.10.0 的发版工具（工作流 get 时替换 {tools}、存盘不换，三个工种的发版环节引用工具，概况里的发版配置，演练里发版那一环）
  * @author xiao li
  * @createDate 2026-10-21 18:20
  */
@@ -167,6 +168,8 @@ import {
     parseWorkflow,
     pickWorkflow,
     toWorkflowInput,
+    fillTools,
+    toolsDirOf,
     workflowFileText,
     workflowText
 } from '../hooks/workflow'
@@ -177,6 +180,7 @@ import {
     parseProjectExtras,
     projectConfigText,
     projectSummaryText,
+    releaseSummaryText,
     systemsText,
     toProjectChange
 } from '../hooks/project'
@@ -4044,6 +4048,8 @@ describe('0.7.0：通用配置与项目差异', () => {
             '用到的系统：yuque 不用、figma 用',
             `通用资料目录：${SHARED}（resources.md 有，secrets.env 没有）`,
             `项目资料目录：${global.dir}（resources.md 没有，secrets.env 有）；两处都有的以项目的为准`,
+            /* 0.10.0 起资料目录后面多一行发版配置（两处的 release.json 在不在） */
+            '发版配置（release.json）：通用资料目录没有，项目资料目录没有；用 Jenkins 发版时在项目资料目录配一份，见工作面板 README「发版工具」',
             '工作流：内置 · 前端',
             '工作台：小黎AI工作台；工种：前端（没设，按前端）',
             /* 0.8.0 起概况末尾多一行体检与演练（默认档案记着演练已走过，这里没有 env.json） */
@@ -5006,3 +5012,182 @@ describe('0.9.0：自动更新', () => {
         })
     })
 })
+
+describe('0.10.0：发版工具', () => {
+    const global = globalFilesOf(FG_ROOT)
+    /** 主会话调一次工作流工具、项目工具、演练工具（新工具不在生成的工具名清单里，按宽松的入参调） */
+    const callWorkflow = ($: Engine, args: Record<string, unknown>) => $.tool.call({ tool: 'mcp__xiaoxiaoli__workflow', ...args } as unknown as ToolCallArgs)
+    const callProject = ($: Engine, args: Record<string, unknown>) => $.tool.call({ tool: 'mcp__xiaoxiaoli__project', ...args } as unknown as ToolCallArgs)
+    const callGuide = ($: Engine, args: Record<string, unknown>) => $.tool.call({ tool: 'mcp__xiaoxiaoli__guide', ...args } as unknown as ToolCallArgs)
+    /** 解析内置工作流的逐字副本，不合格直接失败 */
+    const builtinOf = (role: WorkRole) => {
+        const parsed = parseWorkflow(BUILTIN_WORKFLOW_TEXTS[role])
+        if (!('workflow' in parsed)) throw new Error(`${role} 不合格`)
+        return parsed.workflow
+    }
+    const releaseOf = (role: WorkRole) => {
+        const step = builtinOf(role).story.find(i => i.key === 'release')
+        if (step === undefined) throw new Error(`${role} 没有 release`)
+        return step
+    }
+    const tourOf = () => {
+        const parsed = parseTour(GUIDE_TEXTS.tour)
+        if (!('tour' in parsed)) throw new Error(parsed.reason)
+        return parsed.tour
+    }
+    /** 引擎给的插件目录换成正斜杠后，发版工具应在的位置（只认结尾，插件目录随机器而变） */
+    const TOOL_TAIL = '/xiaoxiaoli/tools/jenkins.mjs'
+
+    test('{tools} 的替换：插件目录下 tools 的绝对路径统一成正斜杠；文字里的占位符全换掉，路径里的 $ 不会被当成替换模式；目录为空时原样', () => {
+        expect(toolsDirOf('C:\\Users\\dev\\.claude\\plugins\\cache\\xiaoli-mods\\xiaoxiaoli\\0.10.0')).toBe('C:/Users/dev/.claude/plugins/cache/xiaoli-mods/xiaoxiaoli/0.10.0/tools')
+        expect(toolsDirOf('/home/dev/xiaoli-mods/mods/xiaoxiaoli/')).toBe('/home/dev/xiaoli-mods/mods/xiaoxiaoli/tools')
+        expect(toolsDirOf('')).toBe('')
+        expect(fillTools('node "{tools}/jenkins.mjs" 与 {tools}', 'D:/a$&b/tools')).toBe('node "D:/a$&b/tools/jenkins.mjs" 与 D:/a$&b/tools')
+        expect(fillTools('node "{tools}/jenkins.mjs"', '')).toBe('node "{tools}/jenkins.mjs"')
+    })
+
+    test('workflow 工具的返回文字：给了 tools 目录时细则里的 {tools} 都换成它（rules、tools 等），定义本身不改；不给时照旧', () => {
+        const active = pickWorkflow({ project: null, personal: null, builtin: { path: '/mod/workflows/frontend.json', text: BUILTIN_WORKFLOW_TEXTS.frontend }, role: 'frontend' }).active
+        const filled = workflowText(active, 'story', 'D:/mods/xiaoxiaoli/tools')
+        expect(filled).not.toContain('{tools}')
+        const release = (JSON.parse(filled.split('\n')[1] ?? '{}') as { story: WorkflowStepTypeLike[] }).story.find(i => i.key === 'release')
+        expect(release?.tools).toContain('node "D:/mods/xiaoxiaoli/tools/jenkins.mjs"')
+        expect(release?.rules?.[0]?.startsWith('工具：在项目目录下运行 node "D:/mods/xiaoxiaoli/tools/jenkins.mjs" <子命令>')).toBe(true)
+        expect(workflowText(active, 'story')).toContain('{tools}/jenkins.mjs')
+        expect(releaseOfActive(active).rules?.[0]).toContain('{tools}/jenkins.mjs')
+        /* 只要缺陷那组时同样替换（缺陷步骤里没有占位符，照常返回） */
+        expect(workflowText(active, 'bug', 'D:/x/tools')).toBe(workflowText(active, 'bug'))
+    })
+
+    test('前端、后端、Python 的发版环节：键与标题不变（前端仍 11 步），tools 与 rules 引用发版工具，写明默认不触发、受保护环境、缺配置怎么办、验收与提测', () => {
+        expect(builtinOf('frontend').story).toHaveLength(11)
+        expect(builtinOf('frontend').story.map(i => i.key)).toEqual(STORY_STEPS.map(i => i.key))
+        expect((['frontend', 'backend', 'python'] as const).map(role => releaseOf(role).title)).toEqual(['发版', '发版', '上线'])
+        for (const role of ['frontend', 'backend', 'python'] as const) {
+            const step = releaseOf(role)
+            const rules = (step.rules ?? []).join('\n')
+            expect(step.tools).toContain('node "{tools}/jenkins.mjs"')
+            expect(step.what).toContain('提测')
+            expect(rules).toContain('node "{tools}/jenkins.mjs" <子命令> --config <发版配置> --secrets "<通用资料目录>/secrets.env" --secrets "<项目资料目录>/secrets.env"')
+            expect(rules).toContain('先跑 check（只读）')
+            expect(rules).toContain('请用户自己填进 secrets.env')
+            expect(rules).toContain('先不带 --yes 跑 build')
+            expect(rules).toContain('用户同意后才带 --yes')
+            expect(rules).toContain('wait 到结束')
+            expect(rules).toContain('protected 为 true')
+            expect(rules).toContain('回滚建议，由用户定')
+            expect(rules).toContain('流转到待测试')
+            expect(rules).toContain('@ 测试负责人')
+            expect(rules).toContain('「TAPD 评论格式」')
+        }
+        expect((releaseOf('frontend').rules ?? []).join('\n')).toContain('可发 / 不建议发')
+        expect((releaseOf('python').rules ?? []).join('\n')).toContain('可上 / 不建议上')
+        expect((releaseOf('backend').rules ?? []).join('\n')).toContain('有数据库变更时写明执行顺序')
+    })
+
+    test('workflow 工具 get（全局模式）：内置工作流里的 {tools} 换成插件目录下 tools 的绝对路径（正斜杠）；用户自定义里写的 {tools} 同样换，存盘的定义不换', async ($, on) => {
+        const { files } = await boot($, on, { cwd: FG_ROOT, files: { [global.config]: JSON.stringify(GLOBAL_CONFIG) } })
+        const builtin = String((await callWorkflow($, { action: 'get', kind: 'story' })).result)
+        expect(builtin).not.toContain('{tools}')
+        expect(builtin).toContain(TOOL_TAIL)
+        expect(builtin).not.toMatch(/\\\\tools/)
+        const custom = {
+            title: '带发版',
+            story: [{ key: 'ship', title: '发版', rules: ['运行 node "{tools}/jenkins.mjs" check'] }],
+            bug: [{ key: 'fix', title: '修' }]
+        }
+        expect(String((await callWorkflow($, { action: 'set', scope: 'project', definition: custom })).result)).toContain('已写入项目自定义工作流')
+        const stored = files[`${global.dir}/workflow.json`] ?? ''
+        expect(stored).toContain('{tools}/jenkins.mjs')
+        const got = String((await callWorkflow($, { action: 'get' })).result)
+        expect(got).toContain('来源：项目自定义')
+        expect(got).not.toContain('{tools}')
+        expect(got).toContain(`${TOOL_TAIL}\\" check`)
+        expect(files[`${global.dir}/workflow.json`]).toBe(stored)
+    })
+
+    test('概况里的发版配置一行：两处 release.json 在不在（只看在不在、不读内容），项目内模式说明按项目内文档', async ($, on) => {
+        expect(releaseSummaryText({ shared: true, data: false })).toBe('发版配置（release.json）：通用资料目录有，项目资料目录没有；发版工具优先用项目资料目录的')
+        expect(releaseSummaryText({ shared: null, data: true })).toBe('发版配置（release.json）：通用资料目录取不到，项目资料目录有；发版工具优先用项目资料目录的')
+        expect(releaseSummaryText({ shared: false, data: false })).toBe('发版配置（release.json）：通用资料目录没有，项目资料目录没有；用 Jenkins 发版时在项目资料目录配一份，见工作面板 README「发版工具」')
+        expect(releaseSummaryText({ shared: true, data: null })).toBe('发版配置（release.json）：项目内模式，发版按项目内文档')
+        const base = {
+            isRepoMode: false,
+            dir: FG_ROOT,
+            dirName: 'fg-demo',
+            configPath: global.config,
+            displayName: '',
+            tapd: null,
+            systems: {},
+            shared: null,
+            data: null,
+            workflowLabel: '内置 · 前端',
+            fullName: '小黎AI工作台',
+            role: { title: '前端', isDefault: true }
+        }
+        /* 不给 release 时不写这一行（老调用照旧） */
+        expect(projectSummaryText(base)).not.toContain('发版配置')
+        expect(projectSummaryText({ ...base, release: { shared: false, data: true } }).split('\n')[7]).toBe('发版配置（release.json）：通用资料目录没有，项目资料目录有；发版工具优先用项目资料目录的')
+
+        const files = {
+            [global.config]: JSON.stringify(GLOBAL_CONFIG),
+            [`${SHARED}/release.json`]: '{"environments":{}}',
+            [`${global.dir}/release.json`]: '{"environments":{}}'
+        }
+        const { seen } = await boot($, on, { cwd: FG_ROOT, files })
+        const summary = String((await callProject($, { action: 'get' })).result)
+        expect(summary).toContain('\n发版配置（release.json）：通用资料目录有，项目资料目录有；发版工具优先用项目资料目录的\n工作流：内置 · 前端')
+        expect((await runCommand($, 'project')).text).toContain('发版配置（release.json）：通用资料目录有，项目资料目录有')
+        expect(seen.reads.filter(i => /\/(resources\.md|secrets\.env|release\.json)$/.test(i))).toEqual([])
+    })
+
+    test('项目内模式的概况：发版按项目内文档', async ($, on) => {
+        await boot($, on)
+        expect(String((await callProject($, { action: 'get' })).result)).toContain('发版配置（release.json）：项目内模式，发版按项目内文档')
+    })
+
+    test('演练里发版那一环：不发版、问是不是 Jenkins、带着配 release.json、请用户自己填密钥、跑只读的 check；脚本里的 {tools} 换成绝对路径', async ($, on) => {
+        const guide = tourOf().steps.release ?? ''
+        expect(guide.startsWith('不发版、不触发构建。问项目是不是用 Jenkins 发版')).toBe(true)
+        expect(guide).toContain('release.json')
+        expect(guide).toContain('哪些环境受保护')
+        expect(guide).toContain('请用户自己把账号与令牌（<前缀>_URL、<前缀>_ACCOUNT、<前缀>_API_TOKEN）填进 secrets.env')
+        expect(guide).toContain('运行一次只读的 node "{tools}/jenkins.mjs" check')
+        expect(guide).toContain('不是用 Jenkins 的，把发版方式（谁触发、有哪些环境、怎么验收）记进资料')
+        const tour = tourOf()
+        const script = tourScript({
+            tour,
+            deps: { depList: [], skippedCount: 0 },
+            roleTitle: '前端',
+            workflowLabel: '内置 · 前端',
+            stepList: tourStepsOf(tour, 'frontend', builtinOf('frontend').story),
+            sharedDir: SHARED,
+            dataDir: global.dir,
+            overview: '项目：演示',
+            toolsDir: 'D:/mods/xiaoxiaoli/tools'
+        })
+        expect(script).not.toContain('{tools}')
+        expect(script).toContain('11. release 发版\n')
+        expect(script).toContain('运行一次只读的 node "D:/mods/xiaoxiaoli/tools/jenkins.mjs" check --config <release.json>')
+
+        const { files } = await boot($, on, { cwd: FG_ROOT, files: { [global.config]: JSON.stringify(GLOBAL_CONFIG) } })
+        const result = String((await callGuide($, { action: 'start' })).result)
+        expect(result).not.toContain('{tools}')
+        expect(result).toContain(`${TOOL_TAIL}" check --config <release.json>`)
+        expect(parseProgress(files[global.state] ?? '').taskList[0]?.steps.at(-1)?.key).toBe('release')
+    })
+})
+
+/** 返回文字里解析出来的步骤（只看用到的字段） */
+interface WorkflowStepTypeLike {
+    key: string
+    tools?: string
+    rules?: string[]
+}
+
+/** 生效工作流里的发版环节 */
+const releaseOfActive = (active: { workflow: { story: readonly WorkflowStepTypeLike[] } }): WorkflowStepTypeLike => {
+    const step = active.workflow.story.find(i => i.key === 'release')
+    if (step === undefined) throw new Error('没有 release')
+    return step
+}

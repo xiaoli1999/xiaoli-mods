@@ -1,6 +1,6 @@
 /**
  * @description 项目差异与通用资料：全局项目配置里的 displayName（面板上显示的名字）与 systems（本项目用不用某个系统）的读取、校验、合并写回，
- * 通用资料目录 shared/ 的约定与说明文字，以及 project 工具 get 的概况文字（含体检与演练那一行）；纯函数便于测试
+ * 通用资料目录 shared/ 的约定与说明文字，以及 project 工具 get 的概况文字（含发版配置、体检与演练那两行）；纯函数便于测试
  * @author xiao li
  * @createDate 2026-11-12 20:00
  */
@@ -10,6 +10,8 @@ import type { TourStateType } from '../types'
 export const SHARED_DIR = 'shared'
 /** 资料文件：两处（通用、项目）都只看存在与否，不读内容 */
 export const RESOURCE_FILES = ['resources.md', 'secrets.env'] as const
+/** 发版配置：发版工具（tools/jenkins.mjs）读的 release.json，两处都可以放，mod 只看在不在 */
+export const RELEASE_FILE = 'release.json'
 /** 生成新会话命令前确保通用资料目录存在时写的说明文件 */
 export const SHARED_README_FILE = 'README.md'
 /** 说明文件的内容：只写用途，不放资料 */
@@ -19,7 +21,8 @@ export const SHARED_README_TEXT = [
     '各项目通用的资料放在这里，由会话里的 AI 在用到时创建和维护：',
     '',
     '- resources.md：通用的地址、命令、发版方式等',
-    '- secrets.env：通用的测试账号等',
+    '- secrets.env：通用的测试账号、发版用的 Jenkins 账号与令牌等',
+    '- release.json：各项目共用的发版配置（可选，工作面板带的发版工具读；一般放在项目资料目录）',
     '',
     '某个项目和这里不一样时，写在它自己的项目资料目录（projects/<项目键>/）里，两处都有的以项目的为准。',
     'AI 工作台的工作面板（插件 xiaoxiaoli）不读这两个文件的内容，只看在不在。',
@@ -207,8 +210,32 @@ export interface ProjectSummaryType {
     fullName: string
     /** 工种中文名与是不是没设（按前端） */
     role: { title: string; isDefault: boolean }
+    /** 发版配置 release.json 在两处资料目录里在不在：不传不写这一行 */
+    release?: ReleaseSummaryType
     /** 体检与演练：不传不写这一行 */
     guide?: GuideSummaryType
+}
+
+/** 概况里发版配置那一行要的东西：两处资料目录里 release.json 在不在 */
+export interface ReleaseSummaryType {
+    /** 通用资料目录里有没有，取不到通用资料目录为 null */
+    shared: boolean | null
+    /** 项目资料目录里有没有，项目内模式为 null */
+    data: boolean | null
+}
+
+/**
+ * 概况里发版配置那一行：两处资料目录里 release.json 在不在（只看在不在，不读内容），发版工具用哪一份。
+ * @param release 两处在不在
+ * @returns 一行
+ */
+export const releaseSummaryText = (release: ReleaseSummaryType): string => {
+    if (release.data === null) return `发版配置（${RELEASE_FILE}）：项目内模式，发版按项目内文档`
+
+    const shared = release.shared === null ? '取不到' : release.shared ? '有' : '没有'
+    const tail = release.data || release.shared ? '发版工具优先用项目资料目录的' : '用 Jenkins 发版时在项目资料目录配一份，见工作面板 README「发版工具」'
+
+    return `发版配置（${RELEASE_FILE}）：通用资料目录${shared}，项目资料目录${release.data ? '有' : '没有'}；${tail}`
 }
 
 /** 概况里体检与演练那一行要的东西 */
@@ -246,7 +273,8 @@ const resourceText = (dir: ResourceDirType): string =>
 
 /**
  * project 工具 get 与 /xiaoxiaoli project 的概况：显示名与目录名、TAPD 绑定、用到的系统、两处资料目录与资料文件在不在（不读内容）、
- * 生效工作流、工作台名字与工种，给了体检与演练时末尾再加一行（见 guideSummaryText）。项目内模式说明显示名与 systems 不支持。
+ * 给了发版配置时再加一行（见 releaseSummaryText）、生效工作流、工作台名字与工种，给了体检与演练时末尾再加一行（见 guideSummaryText）。
+ * 项目内模式说明显示名与 systems 不支持。
  * @param summary 概况所需的一切
  * @returns 多行文字
  */
@@ -264,6 +292,7 @@ export const projectSummaryText = (summary: ProjectSummaryType): string => {
             : `用到的系统：${systemsText(summary.systems)}`,
         `通用资料目录：${summary.shared === null ? '取不到用户目录，没有' : resourceText(summary.shared)}`,
         `项目资料目录：${summary.data === null ? '项目内模式没有（流程与资料按项目内文档）' : resourceText(summary.data)}；两处都有的以项目的为准`,
+        ...(summary.release === undefined ? [] : [releaseSummaryText(summary.release)]),
         `工作流：${summary.workflowLabel}`,
         `工作台：${summary.fullName}；工种：${summary.role.title}${summary.role.isDefault ? '（没设，按前端）' : ''}`,
         ...(summary.guide === undefined ? [] : [guideSummaryText(summary.guide)])
