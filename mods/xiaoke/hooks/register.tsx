@@ -68,10 +68,13 @@ const MANUAL_REST_MS = 2 * 60_000
 const AWAY_MS = 30 * 60_000
 /** 每隔多久对一下主对话的模型（/model 切换后不用等下一次请求） */
 const MODEL_CHECK_MS = 10_000
-/** 提醒气泡：标题、颜色（久坐橙、喝水蓝、手动休息绿）、完成按钮的文字 */
+/**
+ * 提醒气泡：标题、颜色（久坐橙、喝水蓝、手动休息绿）、完成按钮的文字。
+ * 久坐、喝水是作者小黎在提醒大家（小克传话），标题开头写「小黎 · 」；手动休息是用户自己发起的，不带
+ */
 const ALERT_STYLE: Record<RestKind, { title: string; color: string; done: string }> = {
-  sit: { title: '久坐提醒 · 起来走走', color: '#ff9f43', done: '我起来啦' },
-  water: { title: '喝水提醒 · 喝口水', color: '#38bdf8', done: '喝完啦' },
+  sit: { title: '小黎 · 久坐提醒 · 起来走走', color: '#ff9f43', done: '我起来啦' },
+  water: { title: '小黎 · 喝水提醒 · 喝口水', color: '#38bdf8', done: '喝完啦' },
   manual: { title: '休息一下', color: '#4ade80', done: '休息好啦' },
 }
 /** 完成按钮前 1 分钟锁着，之后才能提前结束 */
@@ -600,8 +603,9 @@ async function remind($: Dollar, t: number): Promise<void> {
     await $.store.set('reminders', next)
     await update($, reminded, () => doneHours(next))
     await startRest($, kind, text, ALERT_MS)
-    // 终端通知（按用户自己的通知设置：系统通知或响铃）；发不出去也不影响带子里的提醒
-    void $.ui.notify(text, { title: `小克 · ${ALERT_STYLE[kind].title}` }).catch(() => undefined)
+    // 终端通知（按用户自己的通知设置：系统通知或响铃）；发不出去也不影响带子里的提醒。
+    // 标题直接用「小黎 · 久坐提醒 · 起来走走」这类提醒标题，不再前缀「小克 · 」（叠在一起太绕）
+    void $.ui.notify(text, { title: ALERT_STYLE[kind].title }).catch(() => undefined)
     return
   }
   await update($, reminded, () => doneHours(log))

@@ -21,15 +21,19 @@ const clip = (text: string, max: number) => {
   return flat.length > max ? `${flat.slice(0, max).trimEnd()}…` : flat
 }
 
-/** 人设压成一行，每次调用都要发，越短越省；装的人不一定是作者，主人不写名字 */
+/**
+ * 人设压成一行，每次调用都要发，越短越省（要在 90 字以内）；装的人不一定是作者，主人不写名字。
+ * 末尾一句是用语护栏：不说阴森、像在监视人的话。为了腾出字数并少一点「在下面」的联想，去掉了「趴在输入框上」；
+ * 「只说这轮真实发生的事」同时管着不编造
+ */
 export function reactSystem(): string {
-  return '你是小克，趴在输入框上陪主人写代码的像素小方块，温暖俏皮。只回一句简体中文，不超过30字，提到这轮真实发生的事，不编造，不用emoji，不写代码。'
+  return '你是小克，陪主人写代码的像素小方块，阳光俏皮。只回一句简体中文，不超过30字，只说这轮真实发生的事，不用emoji，不写代码，不说在你下面、盯着你、偷偷这类阴森或监视感的话。'
 }
 
 /** 主人刚提问：零 token 的模板句，直接引用问题开头 */
 export function startEcho(prompt: string, pick: (n: number) => number): string {
   const q = clip(prompt, 14)
-  const templates = ['收到「{q}」，我在旁边盯着～', '「{q}」是吧，交给 Claude，我负责加油', '好嘞，开始搞「{q}」！', '「{q}」，我陪你一起等结果']
+  const templates = ['收到「{q}」，我在旁边陪着～', '「{q}」是吧，交给 Claude，我负责加油', '好嘞，开始搞「{q}」！', '「{q}」，我陪你一起等结果']
   return (templates[pick(templates.length)] ?? templates[0] ?? '').replace('{q}', q)
 }
 
